@@ -611,7 +611,10 @@ async def command_start_handler(call: CallbackQuery) -> None:
     else:
         modules_list_2_sorted = sorted(modules_access_data, key=lambda k: k['num'])
         for module in modules_list_2_sorted:
-            modules_list_2.append(next(item for item in modules_list if item['id'] == str(module.get('module_id'))))
+            module_id_str = str(module.get('module_id'))
+            found_module = next((item for item in modules_list if item['id'] == module_id_str), None)
+            if found_module is not None:
+                modules_list_2.append(found_module)
 
     await edit_message(call.message, 'Выбери модуль, чтобы выполнить задания:', reply_markup=keyboard.modules_keyboard(modules_list_2))
   
