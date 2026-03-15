@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reels Bot - Таблица данных</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+
+        body {
+            margin: 0;
+            background: #0e1621;
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ---------- HEADER ---------- */
+        .header {
+            background: #17212b;
+            padding: 15px;
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+            border-bottom: 1px solid #2b3a4a;
+        }
+
+        /* ---------- TABLE CONTAINER ---------- */
+        .table-container {
+            flex: 1;
+            padding: 20px;
+            overflow-x: auto;
+        }
+
+        /* ---------- CUSTOM TABLE ---------- */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #17212b;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .data-table thead {
+            background: #1f2c38;
+            border-bottom: 2px solid #2b3a4a;
+        }
+
+        .data-table th {
+            padding: 16px 20px;
+            text-align: left;
+            font-size: 14px;
+            font-weight: 600;
+            color: #8ab4f8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .data-table tbody tr {
+            border-bottom: 1px solid #2b3a4a;
+            transition: background 0.2s ease;
+        }
+
+        .data-table tbody tr:hover {
+            background: #1f2c38;
+        }
+
+        .data-table td {
+            padding: 14px 20px;
+            font-size: 14px;
+            color: #e0e0e0;
+        }
+
+        /* ---------- ССЫЛКИ В ТАБЛИЦЕ ---------- */
+        .data-table td a {
+            color: #8ab4f8;
+            text-decoration: none;
+            transition: color 0.2s;
+            display: inline-block;
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .data-table td a:hover {
+            color: #a9c9ff;
+            text-decoration: underline;
+        }
+
+        /* ---------- ПОЧТА ---------- */
+        .data-table td .email {
+            color: #4fc3f7;
+        }
+
+        /* ---------- ТЕЛЕГРАМ ---------- */
+        .data-table td .telegram {
+            color: #29b6f6;
+            font-weight: 500;
+        }
+
+        /* ---------- СТАТУС (опционально) ---------- */
+        .status-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            background: #2f6ea5;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            color: white;
+        }
+
+        /* ---------- ПУСТОЕ СОСТОЯНИЕ ---------- */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            background: #17212b;
+            border-radius: 12px;
+            color: #8fa3b7;
+        }
+
+        .empty-state p {
+            margin: 10px 0 0;
+            font-size: 16px;
+        }
+
+        .empty-icon {
+            font-size: 48px;
+            opacity: 0.5;
+        }
+
+        /* ---------- АДАПТИВНОСТЬ ---------- */
+        @media (max-width: 768px) {
+            .data-table th,
+            .data-table td {
+                padding: 12px 15px;
+                font-size: 13px;
+            }
+
+            .data-table td a {
+                max-width: 150px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .table-container {
+                padding: 10px;
+            }
+
+            .data-table {
+                font-size: 12px;
+            }
+
+            .data-table th,
+            .data-table td {
+                padding: 10px 12px;
+            }
+
+            .data-table td a {
+                max-width: 120px;
+            }
+        }
+
+        /* ---------- ДЛЯ ВСТАВКИ ИЗ FASTAPI ---------- */
+        .fastapi-placeholder {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">Reels Bot - Список пользователей у трекера</div>
+
+<div class="table-container">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Ссылка</th>
+                <th>Почта</th>
+                <th>Ник Telegram</th>
+            </tr>
+        </thead>
+        <tbody>
+            {HTML_MESSAGES}
+        </tbody>
+    </table>
+</div>
+</body>
+</html>

@@ -1,0 +1,5 @@
+.env
+credentials.json
+files
+config.json
+__pycache__
