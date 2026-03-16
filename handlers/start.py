@@ -15,6 +15,7 @@ import re
 
 import datetime
 import asyncio
+import traceback
 from typing import Dict, Any, Callable, Awaitable
 import time
 import math
@@ -643,6 +644,16 @@ async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
 
     lessons_list = db.get_lessons(module_id, users_flow)
     module_data = db.get_module(module_id, users_flow)
+    
+    if module_data is None:
+        error_message = f"⚠️ Ошибка при загрузке мини-аппа\n\nПользователь: {call.from_user.full_name} (@{call.from_user.username}, ID: {call.from_user.id})\nМодуль ID: {module_id}\nПоток: {users_flow}\n\nОшибка: module_data returned None\n\nTraceback:\n{traceback.format_exc()}"
+        try:
+            await call.message.bot.send_message(config.PSYHOLOGIST_CHAT_ID, error_message)
+        except:
+            pass
+        await call.answer("Произошла ошибка при загрузке. Пожалуйста, сообщите об этом в поддержку.", show_alert=True)
+        return
+    
     module_name = module_data['name']
     module_desc = ("\n" + module_data['description']) if module_data['description'] != '' else ''
 

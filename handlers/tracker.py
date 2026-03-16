@@ -177,6 +177,11 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
         msg_1 = await message.bot.send_message(config.USERS_ADDITIONAL_INFO[user_data[0]["email"].lower()]["tracker_chat_id"], f'⬇️ {message.from_user.full_name} @{message.from_user.username} ({user_data[0]["email"].lower()} Поток: {users_flow}) отправил сообщение (Техническая информация: {message.from_user.id}) ⬇️', reply_markup=keyboard.web_app_tracker_chat_keyboard(message.from_user.id))
         await message.bot.forward_message(config.USERS_ADDITIONAL_INFO[user_data[0]["email"].lower()]["tracker_chat_id"], message.chat.id, message.message_id)
     except Exception:
+        error_message = f"⚠️ Ошибка при отправке сообщения трекеру\n\nПользователь: {message.from_user.full_name} (@{message.from_user.username}, ID: {message.from_user.id})\nEmail: {user_data[0]['email'].lower()}\nПоток: {users_flow}\n\nТекст сообщения: {message.html_text or '(пусто)'}\n\nОшибка:\n{traceback.format_exc()}"
+        try:
+            await message.bot.send_message(config.PSYHOLOGIST_CHAT_ID, error_message)
+        except:
+            pass
         print(traceback.format_exc())
         pass
 
