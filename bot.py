@@ -420,12 +420,19 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                 try:
                     import base64
                     from io import BytesIO
-                    from aiogram.types import InputMediaPhoto
+                    from aiogram.types import InputFile
                     
                     if "," in image_base64:
                         image_base64 = image_base64.split(",")[1]
                     
                     image_bytes = base64.b64decode(image_base64)
+                    
+                    # Сохраняем во временный файл
+                    import tempfile
+                    import os
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp_file:
+                        tmp_file.write(image_bytes)
+                        tmp_path = tmp_file.name
                     
                     # Если есть текст, добавляем его к caption
                     caption = f'🆕 Изображение от пользователя в Web версии (Техническая информация: {user_id})'
@@ -435,9 +442,12 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                     # Отправляем фото трекеру
                     msg_photo = await bot.send_photo(
                         int(tracker_chat_id),
-                        photo=BytesIO(image_bytes),
+                        photo=InputFile(tmp_path),
                         caption=caption
                     )
+                    
+                    # Удаляем временный файл
+                    os.remove(tmp_path)
                     
                     message_payload["image"] = image_base64
                 except Exception as e:
@@ -767,12 +777,19 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                 try:
                     import base64
                     from io import BytesIO
-                    from aiogram.types import InputMediaPhoto
+                    from aiogram.types import InputFile
+                    import tempfile
+                    import os
                     
                     if "," in image_base64:
                         image_base64 = image_base64.split(",")[1]
                     
                     image_bytes = base64.b64decode(image_base64)
+                    
+                    # Сохраняем во временный файл
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp_file:
+                        tmp_file.write(image_bytes)
+                        tmp_path = tmp_file.name
                     
                     # Если есть текст, добавляем его к caption
                     caption = f'🆕 Изображение от пользователя в Web версии (Техническая информация: {user_id})'
@@ -782,14 +799,22 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                     # Отправляем фото в поддержку
                     msg_photo = await bot.send_photo(
                         int(support_chat_id),
-                        photo=BytesIO(image_bytes),
+                        photo=InputFile(tmp_path),
                         caption=caption
                     )
+                    
+                    # Удаляем временный файл
+                    os.remove(tmp_path)
                     
                     message_payload["image"] = image_base64
                 except Exception as e:
                     print(f"Ошибка при отправке фото в поддержку: {e}")
-                    message_payload["image"] = image_base64
+                    error_payload = {
+                        "type": "error",
+                        "message": "Не удалось отправить изображение. Пожалуйста, попробуйте ещё раз или отправьте изображение напрямую в чат с ботом."
+                    }
+                    await websocket.send_json(error_payload)
+                    return
             
             # Если есть текст и нет картинки - отправляем текстовое сообщение
             if text and not image_base64:
@@ -1080,13 +1105,20 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                 try:
                     import base64
                     from io import BytesIO
-                    from aiogram.types import InputMediaPhoto
+                    from aiogram.types import InputFile
+                    import tempfile
+                    import os
                     
                     # Убираем data:image/jpeg;base64, префикс если есть
                     if "," in image_base64:
                         image_base64 = image_base64.split(",")[1]
                     
                     image_bytes = base64.b64decode(image_base64)
+                    
+                    # Сохраняем во временный файл
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp_file:
+                        tmp_file.write(image_bytes)
+                        tmp_path = tmp_file.name
                     
                     # Если есть текст, добавляем его к caption
                     caption = f'🆕 Изображение от пользователя в Web версии (Техническая информация: {user_id})'
@@ -1096,15 +1128,23 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                     # Отправляем фото в чат психолога
                     msg_photo = await bot.send_photo(
                         config.PSYHOLOGIST_CHAT_ID,
-                        photo=BytesIO(image_bytes),
+                        photo=InputFile(tmp_path),
                         caption=caption
                     )
+                    
+                    # Удаляем временный файл
+                    os.remove(tmp_path)
                     
                     # Добавляем image_url в payload
                     message_payload["image"] = image_base64
                 except Exception as e:
                     print(f"Ошибка при отправке фото: {e}")
-                    message_payload["image"] = image_base64
+                    error_payload = {
+                        "type": "error",
+                        "message": "Не удалось отправить изображение. Пожалуйста, попробуйте ещё раз или отправьте изображение напрямую в чат с ботом."
+                    }
+                    await websocket.send_json(error_payload)
+                    return
             
             # Если есть текст и нет картинки - отправляем текстовое сообщение
             if text and not image_base64:
