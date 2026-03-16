@@ -439,7 +439,8 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                         caption=caption
                     )
                     
-                    message_payload["image"] = image_base64
+                    # Добавляем image в payload для web с правильным data URL
+                    message_payload["image"] = f"data:image/jpeg;base64,{image_base64}"
                 except Exception as e:
                     print(f"Ошибка при отправке фото трекеру: {e}")
                     # Отправляем ошибку только этому пользователю
@@ -786,7 +787,8 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                         caption=caption
                     )
                     
-                    message_payload["image"] = image_base64
+                    # Добавляем image в payload для web с правильным data URL
+                    message_payload["image"] = f"data:image/jpeg;base64,{image_base64}"
                 except Exception as e:
                     print(f"Ошибка при отправке фото в поддержку: {e}")
                     error_payload = {
@@ -1105,8 +1107,8 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                         caption=caption
                     )
                     
-                    # Добавляем image_url в payload
-                    message_payload["image"] = image_base64
+                    # Добавляем image в payload для web с правильным data URL
+                    message_payload["image"] = f"data:image/jpeg;base64,{image_base64}"
                 except Exception as e:
                     print(f"Ошибка при отправке фото: {e}")
                     error_payload = {
