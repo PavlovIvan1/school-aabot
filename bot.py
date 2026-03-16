@@ -77,9 +77,13 @@ app.add_middleware(
 
 @app.post("/add_data")
 async def handle_alice_request(request: Request):
-    email = str(request.url).split("email=")[-1].split("&")[0].replace("%40", "@")  # TODO привести в нормальный вид
-    flow = str(request.url).split("flow=")[-1].split("&")[0]
-    user_id = str(request.url).split("user_id=")[-1].split("&")[0].replace("%40", "").replace("@", "")
+    # Use query_params for proper URL parsing
+    email = request.query_params.get("email", "")
+    flow = request.query_params.get("flow", "")
+    user_id = request.query_params.get("user_id", "")
+    
+    if not email or not flow or not user_id:
+        raise ValueError("Missing required parameters")
 
     is_email_in_users_access = db.is_email_in_users_access(email)
     is_email_in_added_api_users = db.is_email_in_added_api_users(email)
@@ -108,7 +112,9 @@ async def handle_alice_request(request: Request):
 
 """@app.get("/get_support_chat")
 async def handle_alice_request(request: Request):
-    user_id = str(request.url).split("user_id=")[-1].split("&")[0].replace("%40", "@") # TODO привести в нормальный вид
+    user_id = request.query_params.get("user_id", "")
+    if not user_id:
+        raise ValueError("user_id not found in query parameters")
     support_messages_list = db.get_support_messages_by_tg_id(int(user_id))
     user_data = db.get_user(int(user_id))
 
@@ -165,7 +171,9 @@ async def handle_alice_request(request: Request):
 
 @app.get("/get_user_support_chat")
 async def handle_alice_request(request: Request):
-    user_id = str(request.url).split("user_id=")[-1].split("&")[0].replace("%40", "@") # TODO привести в нормальный вид
+    user_id = request.query_params.get("user_id", "")
+    if not user_id:
+        raise ValueError("user_id not found in query parameters")
     support_messages_list = db.get_support_messages_by_tg_id(int(user_id))
 
     async with aiofiles.open("html_pages/user_to_support.html", mode="r", encoding="utf-8") as f:
@@ -210,7 +218,9 @@ async def handle_alice_request(request: Request):
 @app.get("/get_tracker_chat")
 async def handle_alice_request(request: Request):
     try:
-        user_id = str(request.url).split("user_id=")[-1].split("&")[0].replace("%40", "@")
+        user_id = request.query_params.get("user_id", "")
+        if not user_id:
+            raise ValueError("user_id not found in query parameters")
         tracker_messages_list = db.get_trackers_messages_by_tg_id(int(user_id))
         user_data = db.get_user(int(user_id))
 
@@ -298,7 +308,9 @@ async def handle_alice_request(request: Request):
 @app.get("/get_user_tracker_chat")
 async def handle_alice_request(request: Request):
     try:
-        user_id = str(request.url).split("user_id=")[-1].split("&")[0].replace("%40", "@")
+        user_id = request.query_params.get("user_id", "")
+        if not user_id:
+            raise ValueError("user_id not found in query parameters")
         tracker_messages_list = db.get_trackers_messages_by_tg_id(int(user_id))
 
         async with aiofiles.open("html_pages/user_to_tracker.html", mode="r", encoding="utf-8") as f:
@@ -526,7 +538,9 @@ async def handle_alice_request(request: Request):
 @app.get("/get_support_chat")
 async def handle_alice_request(request: Request):
     try:
-        user_id = str(request.url).split("user_id=")[-1].split("&")[0].replace("%40", "@")
+        user_id = request.query_params.get("user_id", "")
+        if not user_id:
+            raise ValueError("user_id not found in query parameters")
         support_messages_list = db.get_support_messages_by_tg_id(int(user_id))
         user_data = db.get_user(int(user_id))
 
@@ -614,7 +628,9 @@ async def handle_alice_request(request: Request):
 @app.get("/get_user_support_chat")
 async def handle_alice_request(request: Request):
     try:
-        user_id = str(request.url).split("user_id=")[-1].split("&")[0].replace("%40", "@")
+        user_id = request.query_params.get("user_id", "")
+        if not user_id:
+            raise ValueError("user_id not found in query parameters")
         support_messages_list = db.get_support_messages_by_tg_id(int(user_id))
 
         async with aiofiles.open("html_pages/user_to_support.html", mode="r", encoding="utf-8") as f:
@@ -803,7 +819,9 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
 @app.get("/get_psychologist_chat")
 async def handle_alice_request(request: Request):
     try:
-        user_id = str(request.url).split("user_id=")[-1].split("&")[0].replace("%40", "@")
+        user_id = request.query_params.get("user_id", "")
+        if not user_id:
+            raise ValueError("user_id not found in query parameters")
         psychologist_messages_list = db.get_psychologist_messages_by_tg_id(int(user_id))
         user_data = db.get_user(int(user_id))
 
@@ -891,7 +909,11 @@ async def handle_alice_request(request: Request):
 @app.get("/get_user_psychologist_chat")
 async def handle_alice_request(request: Request):
     try:
-        user_id = str(request.url).split("user_id=")[-1].split("&")[0].replace("%40", "@")
+        # Properly parse user_id from query parameters
+        user_id = request.query_params.get("user_id", "")
+        if not user_id:
+            raise ValueError("user_id not found in query parameters")
+        
         psychologist_messages_list = db.get_psychologist_messages_by_tg_id(int(user_id))
 
         async with aiofiles.open("html_pages/user_to_psychologist.html", mode="r", encoding="utf-8") as f:
