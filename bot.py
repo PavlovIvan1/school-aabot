@@ -420,19 +420,12 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                 try:
                     import base64
                     from io import BytesIO
-                    from aiogram.types import InputFile
+                    from aiogram.types import BufferedInputFile
                     
                     if "," in image_base64:
                         image_base64 = image_base64.split(",")[1]
                     
                     image_bytes = base64.b64decode(image_base64)
-                    
-                    # Сохраняем во временный файл
-                    import tempfile
-                    import os
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp_file:
-                        tmp_file.write(image_bytes)
-                        tmp_path = tmp_file.name
                     
                     # Если есть текст, добавляем его к caption
                     caption = f'🆕 Изображение от пользователя в Web версии (Техническая информация: {user_id})'
@@ -442,12 +435,9 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                     # Отправляем фото трекеру
                     msg_photo = await bot.send_photo(
                         int(tracker_chat_id),
-                        photo=InputFile(tmp_path),
+                        photo=BufferedInputFile(image_bytes, filename="image.jpg"),
                         caption=caption
                     )
-                    
-                    # Удаляем временный файл
-                    os.remove(tmp_path)
                     
                     message_payload["image"] = image_base64
                 except Exception as e:
@@ -777,19 +767,12 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                 try:
                     import base64
                     from io import BytesIO
-                    from aiogram.types import InputFile
-                    import tempfile
-                    import os
+                    from aiogram.types import BufferedInputFile
                     
                     if "," in image_base64:
                         image_base64 = image_base64.split(",")[1]
                     
                     image_bytes = base64.b64decode(image_base64)
-                    
-                    # Сохраняем во временный файл
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp_file:
-                        tmp_file.write(image_bytes)
-                        tmp_path = tmp_file.name
                     
                     # Если есть текст, добавляем его к caption
                     caption = f'🆕 Изображение от пользователя в Web версии (Техническая информация: {user_id})'
@@ -799,12 +782,9 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                     # Отправляем фото в поддержку
                     msg_photo = await bot.send_photo(
                         int(support_chat_id),
-                        photo=InputFile(tmp_path),
+                        photo=BufferedInputFile(image_bytes, filename="image.jpg"),
                         caption=caption
                     )
-                    
-                    # Удаляем временный файл
-                    os.remove(tmp_path)
                     
                     message_payload["image"] = image_base64
                 except Exception as e:
@@ -1105,20 +1085,13 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                 try:
                     import base64
                     from io import BytesIO
-                    from aiogram.types import InputFile
-                    import tempfile
-                    import os
+                    from aiogram.types import BufferedInputFile
                     
                     # Убираем data:image/jpeg;base64, префикс если есть
                     if "," in image_base64:
                         image_base64 = image_base64.split(",")[1]
                     
                     image_bytes = base64.b64decode(image_base64)
-                    
-                    # Сохраняем во временный файл
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp_file:
-                        tmp_file.write(image_bytes)
-                        tmp_path = tmp_file.name
                     
                     # Если есть текст, добавляем его к caption
                     caption = f'🆕 Изображение от пользователя в Web версии (Техническая информация: {user_id})'
@@ -1128,12 +1101,9 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                     # Отправляем фото в чат психолога
                     msg_photo = await bot.send_photo(
                         config.PSYHOLOGIST_CHAT_ID,
-                        photo=InputFile(tmp_path),
+                        photo=BufferedInputFile(image_bytes, filename="image.jpg"),
                         caption=caption
                     )
-                    
-                    # Удаляем временный файл
-                    os.remove(tmp_path)
                     
                     # Добавляем image_url в payload
                     message_payload["image"] = image_base64
