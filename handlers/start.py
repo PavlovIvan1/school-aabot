@@ -648,7 +648,8 @@ async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
     if module_data is None:
         error_message = f"⚠️ Ошибка при загрузке мини-аппа\n\nПользователь: {call.from_user.full_name} (@{call.from_user.username}, ID: {call.from_user.id})\nМодуль ID: {module_id}\nПоток: {users_flow}\n\nОшибка: module_data returned None\n\nTraceback:\n{traceback.format_exc()}"
         try:
-            await call.message.bot.send_message(config.PSYHOLOGIST_CHAT_ID, error_message)
+            for admin_id in config.ADMINS_LIST:
+                await call.message.bot.send_message(admin_id, error_message)
         except:
             pass
         await call.answer("Произошла ошибка при загрузке. Пожалуйста, сообщите об этом в поддержку.", show_alert=True)
