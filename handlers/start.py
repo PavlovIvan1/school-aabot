@@ -1162,15 +1162,21 @@ async def command_start_handler(message: Message) -> None:
 
     # Обработка системы метрик
     if message.chat.id not in support_chat_ids and message.chat.id != config.PSYHOLOGIST_CHAT_ID and message.chat.id not in chat_ids_list and str(message.chat.id) not in trackers_chats:
-        chat_admins = await message.bot.get_chat_administrators(message.chat.id)
-        chat_name = (await message.bot.get_chat(message.chat.id)).full_name
+        try:
+            chat_admins = await message.bot.get_chat_administrators(message.chat.id)
+            chat_name = (await message.bot.get_chat(message.chat.id)).full_name
+        except TelegramBadRequest:
+            # Not a group/supergroup chat or no admins
+            chat_admins = []
+            chat_name = None
+        
         chat_type = None
         owner_id = None
 
         for admin in chat_admins:
             mentor_data = db.get_mentor_by_id(admin.user.id)
 
-            if mentor_data is not None and chat_name.__contains__(mentor_data["mentor_name"]):
+            if mentor_data is not None and chat_name is not None and chat_name.__contains__(mentor_data["mentor_name"]):
                 owner_id = admin.user.id
                 chat_type = 'mentor'
                 break
@@ -1406,7 +1412,10 @@ async def command_start_handler(message: Message) -> None:
     else:
         db.edit_homework(homework_data[0]["homework_id"], status='❌', comment=message.text, check_time=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
-    await message.bot.set_message_reaction(message.chat.id, message.message_id, [{"type": "emoji", "emoji": "👍"}])
+    try:
+        await message.bot.set_message_reaction(message.chat.id, message.message_id, [{"type": "emoji", "emoji": "👍"}])
+    except TelegramBadRequest:
+        pass  # Message not found or other error
 
     if message.text.startswith('+'):
         await send_congratulation_message(message, int(homework_data[0]['lesson_id']), int(homework_data[0]['user_data'].split()[-1]))

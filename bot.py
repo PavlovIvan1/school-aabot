@@ -275,12 +275,7 @@ async def handle_alice_request(request: Request):
 
         return HTMLResponse(content=html_response, status_code=200)
     except Exception as e:
-        error_text = f"⚠️ Ошибка при загрузке чата трекера\n\nURL: {request.url}\n\nОшибка: {str(e)}\n\n{traceback.format_exc()}"
-        try:
-            for admin_id in config.ADMINS_LIST:
-                await bot.send_message(admin_id, error_text)
-        except:
-            pass
+        print(f"Ошибка при загрузке чата трекера: {e}")
         error_html = """
         <!DOCTYPE html>
         <html>
@@ -351,12 +346,7 @@ async def handle_alice_request(request: Request):
 
         return HTMLResponse(content=html_response, status_code=200)
     except Exception as e:
-        error_text = f"⚠️ Ошибка при загрузке мини-аппа трекера\n\nUser ID: {request.url}\n\nОшибка: {str(e)}\n\n{traceback.format_exc()}"
-        try:
-            for admin_id in config.ADMINS_LIST:
-                await bot.send_message(admin_id, error_text)
-        except:
-            pass
+        print(f"Ошибка при загрузке мини-аппа трекера: {e}")
         error_html = """
         <!DOCTYPE html>
         <html>
@@ -628,12 +618,7 @@ async def handle_alice_request(request: Request):
 
         return HTMLResponse(content=html_response, status_code=200)
     except Exception as e:
-        error_text = f"⚠️ Ошибка при загрузке чата поддержки\n\nURL: {request.url}\n\nОшибка: {str(e)}\n\n{traceback.format_exc()}"
-        try:
-            for admin_id in config.ADMINS_LIST:
-                await bot.send_message(admin_id, error_text)
-        except:
-            pass
+        print(f"Ошибка при загрузке чата поддержки: {e}")
         error_html = """
         <!DOCTYPE html>
         <html>
@@ -704,12 +689,7 @@ async def handle_alice_request(request: Request):
 
         return HTMLResponse(content=html_response, status_code=200)
     except Exception as e:
-        error_text = f"⚠️ Ошибка при загрузке мини-аппа поддержки\n\nURL: {request.url}\n\nОшибка: {str(e)}\n\n{traceback.format_exc()}"
-        try:
-            for admin_id in config.ADMINS_LIST:
-                await bot.send_message(admin_id, error_text)
-        except:
-            pass
+        print(f"Ошибка при загрузке мини-аппа поддержки: {e}")
         error_html = """
         <!DOCTYPE html>
         <html>
@@ -942,12 +922,7 @@ async def handle_alice_request(request: Request):
 
         return HTMLResponse(content=html_response, status_code=200)
     except Exception as e:
-        error_text = f"⚠️ Ошибка при загрузке чата психолога\n\nURL: {request.url}\n\nОшибка: {str(e)}\n\n{traceback.format_exc()}"
-        try:
-            for admin_id in config.ADMINS_LIST:
-                await bot.send_message(admin_id, error_text)
-        except:
-            pass
+        print(f"Ошибка при загрузке чата психолога: {e}")
         error_html = """
         <!DOCTYPE html>
         <html>
@@ -1028,12 +1003,7 @@ async def handle_alice_request(request: Request):
 
         return HTMLResponse(content=html_response, status_code=200)
     except Exception as e:
-        error_text = f"⚠️ Ошибка при загрузке мини-аппа психолога\n\nUser ID: {request.url}\n\nОшибка: {str(e)}\n\n{traceback.format_exc()}"
-        try:
-            for admin_id in config.ADMINS_LIST:
-                await bot.send_message(admin_id, error_text)
-        except:
-            pass
+        print(f"Ошибка при загрузке мини-аппа психолога: {e}")
         error_html = """
         <!DOCTYPE html>
         <html>
