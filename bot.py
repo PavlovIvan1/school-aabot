@@ -400,11 +400,12 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
         while True:
             data = await websocket.receive_json()
 
-            text = data["message"]
+            text = data.get("message", "")
+            image_base64 = data.get("image", None)
 
             unix_time = int(time.time())
 
-            # ✅ сохраняем сообщение
+            # Сохраняем в БД
             db.add_to_trackers_messages(
                 user_id,
                 tracker_chat_id,
@@ -416,7 +417,7 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                 None
             )
 
-            # ✅ сервер рассылает событие (источник истины)
+            # Подготовка payload
             message_payload = {
                 "type": "message",
                 "text": text,
@@ -424,25 +425,51 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                 "unix_time": unix_time
             }
 
-            try:
-                tg_data = await bot.get_chat(user_id)
-                tg_username = tg_data.username
-                tg_name = tg_data.first_name
-            except:
-                tg_username = None
-                tg_name = None
+            if image_base64:
+                # Декодируем base64 и отправляем фото
+                try:
+                    import base64
+                    from io import BytesIO
+                    from aiogram.types import InputMediaPhoto
+                    
+                    if "," in image_base64:
+                        image_base64 = image_base64.split(",")[1]
+                    
+                    image_bytes = base64.b64decode(image_base64)
+                    
+                    # Отправляем фото трекеру
+                    msg_photo = await bot.send_photo(
+                        int(tracker_chat_id),
+                        photo=BytesIO(image_bytes),
+                        caption=f'🆕 Изображение от пользователя в Web версии (Техническая информация: {user_id})'
+                    )
+                    
+                    message_payload["image"] = image_base64
+                except Exception as e:
+                    print(f"Ошибка при отправке фото трекеру: {e}")
+                    message_payload["image"] = image_base64
+            else:
+                # Обычное текстовое сообщение
+                try:
+                    tg_data = await bot.get_chat(user_id)
+                    tg_username = tg_data.username
+                    tg_name = tg_data.first_name
+                except:
+                    tg_username = None
+                    tg_name = None
 
-            try:
-                await bot.send_message(int(tracker_chat_id), f'🆕 Новое сообщение от пользователя {tg_name} @{tg_username} ({user_data[0]["email"].lower()} Поток: {users_flow}) в Web версии (Техническая информация: {user_id})', reply_markup=keyboard.web_app_tracker_chat_keyboard(user_id))
-            except Exception as e:
-                print(f"Ошибка при отправке сообщения трекеру {user_id}: {e}")
+                try:
+                    await bot.send_message(int(tracker_chat_id), f'🆕 Новое сообщение от пользователя {tg_name} @{tg_username} ({user_data[0]["email"].lower()} Поток: {users_flow}) в Web версии (Техническая информация: {user_id})', reply_markup=keyboard.web_app_tracker_chat_keyboard(user_id))
+                except Exception as e:
+                    print(f"Ошибка при отправке сообщения трекеру {user_id}: {e}")
 
             # отправляем ВСЕМ подключённым (включая отправителя)
             for ws in config.ws_connections[user_id]:
                 await ws.send_json(message_payload)
 
     except WebSocketDisconnect:
-        config.ws_connections[user_id].remove(websocket)
+        if user_id in config.ws_connections and websocket in config.ws_connections[user_id]:
+            config.ws_connections[user_id].remove(websocket)
 
 @app.websocket("/ws/tracker_to_user_chat/{user_id}")
 async def websocket_chat(websocket: WebSocket, user_id: str):
@@ -718,11 +745,12 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
         while True:
             data = await websocket.receive_json()
 
-            text = data["message"]
+            text = data.get("message", "")
+            image_base64 = data.get("image", None)
 
             unix_time = int(time.time())
 
-            # ✅ сохраняем сообщение
+            # Сохраняем в БД
             db.add_to_support_messages(
                 user_id,
                 support_chat_id,
@@ -734,7 +762,7 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                 None
             )
 
-            # ✅ сервер рассылает событие (источник истины)
+            # Подготовка payload
             message_payload = {
                 "type": "message",
                 "text": text,
@@ -742,25 +770,51 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                 "unix_time": unix_time
             }
 
-            try:
-                tg_data = await bot.get_chat(user_id)
-                tg_username = tg_data.username
-                tg_name = tg_data.first_name
-            except:
-                tg_username = None
-                tg_name = None
+            if image_base64:
+                # Декодируем base64 и отправляем фото
+                try:
+                    import base64
+                    from io import BytesIO
+                    from aiogram.types import InputMediaPhoto
+                    
+                    if "," in image_base64:
+                        image_base64 = image_base64.split(",")[1]
+                    
+                    image_bytes = base64.b64decode(image_base64)
+                    
+                    # Отправляем фото в поддержку
+                    msg_photo = await bot.send_photo(
+                        int(support_chat_id),
+                        photo=BytesIO(image_bytes),
+                        caption=f'🆕 Изображение от пользователя в Web версии (Техническая информация: {user_id})'
+                    )
+                    
+                    message_payload["image"] = image_base64
+                except Exception as e:
+                    print(f"Ошибка при отправке фото в поддержку: {e}")
+                    message_payload["image"] = image_base64
+            else:
+                # Обычное текстовое сообщение
+                try:
+                    tg_data = await bot.get_chat(user_id)
+                    tg_username = tg_data.username
+                    tg_name = tg_data.first_name
+                except:
+                    tg_username = None
+                    tg_name = None
 
-            try:
-                await bot.send_message(int(support_chat_id), f'🆕 Новое сообщение от пользователя {tg_name} @{tg_username} ({user_data[0]["email"].lower()} Поток: {users_flow}) в Web версии (Техническая информация: {user_id})', reply_markup=keyboard.web_app_support_chat_keyboard(user_id))
-            except Exception as e:
-                print(f"Ошибка при отправке сообщения трекеру {user_id}: {e}")
+                try:
+                    await bot.send_message(int(support_chat_id), f'🆕 Новое сообщение от пользователя {tg_name} @{tg_username} ({user_data[0]["email"].lower()} Поток: {users_flow}) в Web версии (Техническая информация: {user_id})', reply_markup=keyboard.web_app_support_chat_keyboard(user_id))
+                except Exception as e:
+                    print(f"Ошибка при отправке сообщения в поддержку {user_id}: {e}")
 
             # отправляем ВСЕМ подключённым (включая отправителя)
             for ws in config.ws_connections_support[user_id]:
                 await ws.send_json(message_payload)
 
     except WebSocketDisconnect:
-        config.ws_connections_support[user_id].remove(websocket)
+        if user_id in config.ws_connections_support and websocket in config.ws_connections_support[user_id]:
+            config.ws_connections_support[user_id].remove(websocket)
 
 @app.websocket("/ws/support_to_user_chat/{user_id}")
 async def websocket_chat(websocket: WebSocket, user_id: str):
@@ -1008,11 +1062,12 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
         while True:
             data = await websocket.receive_json()
 
-            text = data["message"]
+            text = data.get("message", "")
+            image_base64 = data.get("image", None)
 
             unix_time = int(time.time())
 
-            # ✅ сохраняем сообщение
+            # Сохраняем в БД
             db.add_to_psychologist_messages(
                 user_id,
                 config.PSYHOLOGIST_CHAT_ID,
@@ -1024,7 +1079,7 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                 None
             )
 
-            # ✅ сервер рассылает событие (источник истины)
+            # Подготовка payload
             message_payload = {
                 "type": "message",
                 "text": text,
@@ -1032,25 +1087,53 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                 "unix_time": unix_time
             }
 
-            try:
-                tg_data = await bot.get_chat(user_id)
-                tg_username = tg_data.username
-                tg_name = tg_data.first_name
-            except:
-                tg_username = None
-                tg_name = None
+            if image_base64:
+                # Декодируем base64 и отправляем фото в чат психолога
+                try:
+                    import base64
+                    from io import BytesIO
+                    from aiogram.types import InputMediaPhoto
+                    
+                    # Убираем data:image/jpeg;base64, префикс если есть
+                    if "," in image_base64:
+                        image_base64 = image_base64.split(",")[1]
+                    
+                    image_bytes = base64.b64decode(image_base64)
+                    
+                    # Отправляем фото в чат психолога
+                    msg_photo = await bot.send_photo(
+                        config.PSYHOLOGIST_CHAT_ID,
+                        photo=BytesIO(image_bytes),
+                        caption=f'🆕 Изображение от пользователя в Web версии (Техническая информация: {user_id})'
+                    )
+                    
+                    # Добавляем image_url в payload
+                    message_payload["image"] = image_base64
+                except Exception as e:
+                    print(f"Ошибка при отправке фото: {e}")
+                    message_payload["image"] = image_base64
+            else:
+                # Обычное текстовое сообщение
+                try:
+                    tg_data = await bot.get_chat(user_id)
+                    tg_username = tg_data.username
+                    tg_name = tg_data.first_name
+                except:
+                    tg_username = None
+                    tg_name = None
 
-            try:
-                await bot.send_message(config.PSYHOLOGIST_CHAT_ID, f'🆕 Новое сообщение от пользователя {tg_name} @{tg_username} ({user_data[0]["email"].lower()} Поток: {users_flow}) в Web версии (Техническая информация: {user_id})', reply_markup=keyboard.web_app_psychologist_chat_keyboard(user_id))
-            except Exception as e:
-                print(f"Ошибка при отправке сообщения трекеру {user_id}: {e}")
+                try:
+                    await bot.send_message(config.PSYHOLOGIST_CHAT_ID, f'🆕 Новое сообщение от пользователя {tg_name} @{tg_username} ({user_data[0]["email"].lower()} Поток: {users_flow}) в Web версии (Техническая информация: {user_id})', reply_markup=keyboard.web_app_psychologist_chat_keyboard(user_id))
+                except Exception as e:
+                    print(f"Ошибка при отправке сообщения трекеру {user_id}: {e}")
 
             # отправляем ВСЕМ подключённым (включая отправителя)
             for ws in config.ws_connections_psychologist[user_id]:
                 await ws.send_json(message_payload)
 
     except WebSocketDisconnect:
-        config.ws_connections_psychologist[user_id].remove(websocket)
+        if user_id in config.ws_connections_psychologist:
+            config.ws_connections_psychologist[user_id].remove(websocket)
 
 @app.websocket("/ws/psychologist_to_user_chat/{user_id}")
 async def websocket_chat(websocket: WebSocket, user_id: str):

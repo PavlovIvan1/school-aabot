@@ -130,6 +130,63 @@ body {
 .send-btn:active {
   transform: scale(0.96);
 }
+
+.attach-btn {
+  background: transparent;
+  border: none;
+  color: #8fa3b7;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: 0.2s;
+}
+
+.attach-btn:hover {
+  color: #fff;
+}
+
+#fileInput {
+  display: none;
+}
+
+.preview-container {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.preview-image {
+  max-width: 150px;
+  max-height: 150px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid #2b3a4a;
+}
+
+.preview-remove {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: #f00;
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-wrapper {
+  position: relative;
+}
 </style>
 </head>
 
@@ -142,6 +199,9 @@ body {
 </div>
 
 <div class="input-area">
+  <input type="file" id="fileInput" accept="image/*" onchange="handleFileSelect(event)">
+  <button class="attach-btn" onclick="document.getElementById('fileInput').click()">📎</button>
+
   <textarea
     id="msgInput"
     rows="1"
@@ -150,6 +210,8 @@ body {
 
   <button class="send-btn" onclick="sendMessage()">➤</button>
 </div>
+
+<div class="preview-container" id="previewContainer"></div>
 
 <script>
 const chat = document.getElementById("chat");
@@ -174,7 +236,7 @@ input.addEventListener("input", () => {
 
 /* ---------- MESSAGE RENDER ---------- */
 
-function addMessage(text, type, unixTime=null) {
+function addMessage(text, type, unixTime=null, imageUrl=null) {
 
   const msg = document.createElement("div");
   msg.classList.add("message", type);
@@ -183,8 +245,18 @@ function addMessage(text, type, unixTime=null) {
       ? new Date(unixTime * 1000).toLocaleString()
       : new Date().toLocaleString();
 
+  let content = '';
+  
+  if (imageUrl) {
+    content += `<img src="${imageUrl}" style="max-width: 200px; max-height: 200px; border-radius: 8px; margin-bottom: 6px;">`;
+  }
+  
+  if (text) {
+    content += text;
+  }
+
   msg.innerHTML = `
-      ${text}
+      ${content}
       <div class="time">${time}</div>
   `;
 
@@ -194,17 +266,90 @@ function addMessage(text, type, unixTime=null) {
 
 /* ---------- SEND ---------- */
 
+let selectedImageBase64 = null;
+
+function handleFileSelect(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  if (!file.type.startsWith('image/')) {
+    alert('Пожалуйста, выберите изображение');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const img = new Image();
+    img.onload = function() {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+
+      const maxWidth = 1280;
+      const maxHeight = 1280;
+
+      let width = img.width;
+      let height = img.height;
+
+      if (width > maxWidth) {
+        height = (height * maxWidth) / width;
+        width = maxWidth;
+      }
+      if (height > maxHeight) {
+        width = (width * maxHeight) / height;
+        height = maxHeight;
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+
+      ctx.drawImage(img, 0, 0, width, height);
+
+      selectedImageBase64 = canvas.toDataURL('image/jpeg', 0.8);
+
+      const previewContainer = document.getElementById('previewContainer');
+      previewContainer.innerHTML = '';
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'preview-wrapper';
+
+      const previewImg = document.createElement('img');
+      previewImg.src = selectedImageBase64;
+      previewImg.className = 'preview-image';
+
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'preview-remove';
+      removeBtn.innerHTML = '✕';
+      removeBtn.onclick = function() {
+        selectedImageBase64 = null;
+        previewContainer.innerHTML = '';
+        document.getElementById('fileInput').value = '';
+      };
+
+      wrapper.appendChild(previewImg);
+      wrapper.appendChild(removeBtn);
+      previewContainer.appendChild(wrapper);
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
 function sendMessage() {
 
   const text = input.value.trim();
-  if (!text) return;
+
+  if (!text && !selectedImageBase64) return;
 
   ws.send(JSON.stringify({
-      message: text
+    message: text,
+    image: selectedImageBase64
   }));
 
   input.value = "";
   input.style.height = "auto";
+  selectedImageBase64 = null;
+  document.getElementById('previewContainer').innerHTML = '';
+  document.getElementById('fileInput').value = '';
 }
 
 /* Enter — отправка, Shift+Enter — новая строка */
@@ -288,7 +433,8 @@ function connectWS() {
       addMessage(
         data.text,
         messageType,
-        data.unix_time
+        data.unix_time,
+        data.image || null
       );
     }
   };
