@@ -442,7 +442,13 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                     message_payload["image"] = image_base64
                 except Exception as e:
                     print(f"Ошибка при отправке фото трекеру: {e}")
-                    message_payload["image"] = image_base64
+                    # Отправляем ошибку только этому пользователю
+                    error_payload = {
+                        "type": "error",
+                        "message": "Не удалось отправить изображение. Пожалуйста, попробуйте ещё раз или отправьте изображение напрямую в чат с ботом."
+                    }
+                    await websocket.send_json(error_payload)
+                    return  # Прерываем обработку, не отправляем сообщение
             
             # Если есть текст и нет картинки - отправляем текстовое сообщение
             if text and not image_base64:

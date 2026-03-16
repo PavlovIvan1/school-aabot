@@ -30,6 +30,36 @@ import config
 db = database.MySQL()
 
 
+async def add_user_to_spreadsheet(user_id: int, email: str, flow: str, bot):
+    """Добавляет пользователя в Google Таблицу если его там нет"""
+    import gspread_asyncio
+    from google.oauth2.service_account import Credentials
+    
+    try:
+        # Проверяем, не добавлен ли уже пользователь
+        is_in_added = db.is_email_in_added_api_users(email)
+        if is_in_added:
+            return  # Уже добавлен
+        
+        db.add_email_to_added_api_users(email)
+        db.add_to_link_access(str(user_id), email.lower().strip(), flow)
+        
+        # Добавляем в Google Таблицу
+        creds = Credentials.from_service_account_file("credentials.json")
+        scoped = creds.with_scopes([
+            'https://www.googleapis.com/auth/spreadsheets',
+            'https://www.googleapis.com/auth/drive'
+        ])
+        agcm = gspread_asyncio.AioGspreadServiceAccount(from_credentials=scoped)
+        agc = await agcm.authorize()
+        ss_2 = await agc.open_by_url(config.SPREADSHEET_URL_USERS)
+        table = await ss_2.get_worksheet_by_id(0)
+        await table.append_row([email.lower().strip(), -1002572458943, flow, "", -1003545567896], value_input_option="USER_ENTERED")
+    except Exception as e:
+        # Логируем ошибку только в консоль
+        print(f"Ошибка при добавлении в таблицу: {email} - {e}")
+
+
 class QuestionChecker:
     def __init__(self):
         # Паттерны для вопросов
@@ -219,6 +249,11 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
                 pass
 
             db.add_user(message.from_user.id, link_access_data[0]['email'])
+            # Добавляем пользователя в Google Таблицу
+            try:
+                await add_user_to_spreadsheet(message.from_user.id, link_access_data[0]['email'], db.get_flow_by_email(link_access_data[0]['email']), message.bot)
+            except Exception as e:
+                print(f"Ошибка при добавлении в Google Таблицу: {e}")
         else:
             await state.set_state(GetAccess.email)
             
@@ -524,6 +559,12 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
         await state.clear()
         
         users_flow = db.get_flow_by_email(message.text.lower())
+        
+        # Добавляем пользователя в Google Таблицу
+        try:
+            await add_user_to_spreadsheet(message.from_user.id, message.text.lower(), users_flow, message.bot)
+        except Exception as e:
+            print(f"Ошибка при добавлении в Google Таблицу: {e}")
 
         if float(users_flow) >= 14.3:
             await message.answer_document(FSInputFile('files/Инструкция по чат боту.pdf'))
