@@ -437,19 +437,25 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                     
                     image_bytes = base64.b64decode(image_base64)
                     
+                    # Если есть текст, добавляем его к caption
+                    caption = f'🆕 Изображение от пользователя в Web версии (Техническая информация: {user_id})'
+                    if text:
+                        caption = f'{text}\n\n🆕 Изображение от пользователя в Web версии (Техническая информация: {user_id})'
+                    
                     # Отправляем фото трекеру
                     msg_photo = await bot.send_photo(
                         int(tracker_chat_id),
                         photo=BytesIO(image_bytes),
-                        caption=f'🆕 Изображение от пользователя в Web версии (Техническая информация: {user_id})'
+                        caption=caption
                     )
                     
                     message_payload["image"] = image_base64
                 except Exception as e:
                     print(f"Ошибка при отправке фото трекеру: {e}")
                     message_payload["image"] = image_base64
-            else:
-                # Обычное текстовое сообщение
+            
+            # Если есть текст и нет картинки - отправляем текстовое сообщение
+            if text and not image_base64:
                 try:
                     tg_data = await bot.get_chat(user_id)
                     tg_username = tg_data.username
@@ -459,7 +465,7 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                     tg_name = None
 
                 try:
-                    await bot.send_message(int(tracker_chat_id), f'🆕 Новое сообщение от пользователя {tg_name} @{tg_username} ({user_data[0]["email"].lower()} Поток: {users_flow}) в Web версии (Техническая информация: {user_id})', reply_markup=keyboard.web_app_tracker_chat_keyboard(user_id))
+                    await bot.send_message(int(tracker_chat_id), f'🆕 Новое сообщение от пользователя {tg_name} @{tg_username} ({user_data[0]["email"].lower()} Поток: {users_flow}) в Web версии (Техническая информация: {user_id})\n\n{text}', reply_markup=keyboard.web_app_tracker_chat_keyboard(user_id))
                 except Exception as e:
                     print(f"Ошибка при отправке сообщения трекеру {user_id}: {e}")
 
@@ -782,19 +788,25 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                     
                     image_bytes = base64.b64decode(image_base64)
                     
+                    # Если есть текст, добавляем его к caption
+                    caption = f'🆕 Изображение от пользователя в Web версии (Техническая информация: {user_id})'
+                    if text:
+                        caption = f'{text}\n\n🆕 Изображение от пользователя в Web версии (Техническая информация: {user_id})'
+                    
                     # Отправляем фото в поддержку
                     msg_photo = await bot.send_photo(
                         int(support_chat_id),
                         photo=BytesIO(image_bytes),
-                        caption=f'🆕 Изображение от пользователя в Web версии (Техническая информация: {user_id})'
+                        caption=caption
                     )
                     
                     message_payload["image"] = image_base64
                 except Exception as e:
                     print(f"Ошибка при отправке фото в поддержку: {e}")
                     message_payload["image"] = image_base64
-            else:
-                # Обычное текстовое сообщение
+            
+            # Если есть текст и нет картинки - отправляем текстовое сообщение
+            if text and not image_base64:
                 try:
                     tg_data = await bot.get_chat(user_id)
                     tg_username = tg_data.username
@@ -804,7 +816,7 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                     tg_name = None
 
                 try:
-                    await bot.send_message(int(support_chat_id), f'🆕 Новое сообщение от пользователя {tg_name} @{tg_username} ({user_data[0]["email"].lower()} Поток: {users_flow}) в Web версии (Техническая информация: {user_id})', reply_markup=keyboard.web_app_support_chat_keyboard(user_id))
+                    await bot.send_message(int(support_chat_id), f'🆕 Новое сообщение от пользователя {tg_name} @{tg_username} ({user_data[0]["email"].lower()} Поток: {users_flow}) в Web версии (Техническая информация: {user_id})\n\n{text}', reply_markup=keyboard.web_app_support_chat_keyboard(user_id))
                 except Exception as e:
                     print(f"Ошибка при отправке сообщения в поддержку {user_id}: {e}")
 
@@ -1100,11 +1112,16 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                     
                     image_bytes = base64.b64decode(image_base64)
                     
+                    # Если есть текст, добавляем его к caption
+                    caption = f'🆕 Изображение от пользователя в Web версии (Техническая информация: {user_id})'
+                    if text:
+                        caption = f'{text}\n\n🆕 Изображение от пользователя в Web версии (Техническая информация: {user_id})'
+                    
                     # Отправляем фото в чат психолога
                     msg_photo = await bot.send_photo(
                         config.PSYHOLOGIST_CHAT_ID,
                         photo=BytesIO(image_bytes),
-                        caption=f'🆕 Изображение от пользователя в Web версии (Техническая информация: {user_id})'
+                        caption=caption
                     )
                     
                     # Добавляем image_url в payload
@@ -1112,8 +1129,9 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                 except Exception as e:
                     print(f"Ошибка при отправке фото: {e}")
                     message_payload["image"] = image_base64
-            else:
-                # Обычное текстовое сообщение
+            
+            # Если есть текст и нет картинки - отправляем текстовое сообщение
+            if text and not image_base64:
                 try:
                     tg_data = await bot.get_chat(user_id)
                     tg_username = tg_data.username
@@ -1123,7 +1141,7 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                     tg_name = None
 
                 try:
-                    await bot.send_message(config.PSYHOLOGIST_CHAT_ID, f'🆕 Новое сообщение от пользователя {tg_name} @{tg_username} ({user_data[0]["email"].lower()} Поток: {users_flow}) в Web версии (Техническая информация: {user_id})', reply_markup=keyboard.web_app_psychologist_chat_keyboard(user_id))
+                    await bot.send_message(config.PSYHOLOGIST_CHAT_ID, f'🆕 Новое сообщение от пользователя {tg_name} @{tg_username} ({user_data[0]["email"].lower()} Поток: {users_flow}) в Web версии (Техническая информация: {user_id})\n\n{text}', reply_markup=keyboard.web_app_psychologist_chat_keyboard(user_id))
                 except Exception as e:
                     print(f"Ошибка при отправке сообщения трекеру {user_id}: {e}")
 
