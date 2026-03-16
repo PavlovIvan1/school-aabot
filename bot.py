@@ -271,7 +271,7 @@ async def handle_alice_request(request: Request):
                 await bot.send_message(admin_id, error_text)
         except:
             pass
-        error_html = f"""
+        error_html = """
         <!DOCTYPE html>
         <html>
         <head>
@@ -279,20 +279,15 @@ async def handle_alice_request(request: Request):
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>Ошибка</title>
             <style>
-                body {{ font-family: Arial, sans-serif; background: #1a1a2e; color: #fff; padding: 20px; text-align: center; }}
-                .error-box {{ background: #16213e; padding: 30px; border-radius: 15px; max-width: 600px; margin: 50px auto; }}
-                h1 {{ color: #e94560; }}
-                .error-message {{ background: #0f3460; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: left; font-family: monospace; }}
-                .btn {{ background: #e94560; color: white; padding: 12px 30px; border: none; border-radius: 8px; cursor: pointer; margin-top: 20px; }}
+                body { font-family: Arial, sans-serif; background: #1a1a2e; color: #fff; padding: 20px; text-align: center; }
+                .error-box { background: #16213e; padding: 30px; border-radius: 15px; max-width: 600px; margin: 50px auto; }
+                h1 { color: #e94560; }
             </style>
         </head>
         <body>
             <div class="error-box">
-                <h1>😔 Произошла ошибка</h1>
-                <p>При загрузке чата возникла техническая проблема.</p>
-                <div class="error-message">{str(e)}</div>
-                <p>Пожалуйста, сообщите об этой ошибке в поддержку.</p>
-                <button class="btn" onclick="window.history.back()">Вернуться назад</button>
+                <h1>На обучении есть психолог, который разберет каждый твой запрос, если будешь сталкиваться со сложностями во время обучения.</h1>
+                <p>Отправь сообщение, чтобы психолог связался с тобой</p>
             </div>
         </body>
         </html>
@@ -350,7 +345,7 @@ async def handle_alice_request(request: Request):
                 await bot.send_message(admin_id, error_text)
         except:
             pass
-        error_html = f"""
+        error_html = """
         <!DOCTYPE html>
         <html>
         <head>
@@ -358,20 +353,15 @@ async def handle_alice_request(request: Request):
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>Ошибка</title>
             <style>
-                body {{ font-family: Arial, sans-serif; background: #1a1a2e; color: #fff; padding: 20px; text-align: center; }}
-                .error-box {{ background: #16213e; padding: 30px; border-radius: 15px; max-width: 600px; margin: 50px auto; }}
-                h1 {{ color: #e94560; }}
-                .error-message {{ background: #0f3460; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: left; font-family: monospace; }}
-                .btn {{ background: #e94560; color: white; padding: 12px 30px; border: none; border-radius: 8px; cursor: pointer; margin-top: 20px; }}
+                body { font-family: Arial, sans-serif; background: #1a1a2e; color: #fff; padding: 20px; text-align: center; }
+                .error-box { background: #16213e; padding: 30px; border-radius: 15px; max-width: 600px; margin: 50px auto; }
+                h1 { color: #e94560; }
             </style>
         </head>
         <body>
             <div class="error-box">
-                <h1>😔 Произошла ошибка</h1>
-                <p>При загрузке чата возникла техническая проблема.</p>
-                <div class="error-message">{str(e)}</div>
-                <p>Пожалуйста, сообщите об этой ошибке в поддержку.</p>
-                <button class="btn" onclick="window.history.back()">Вернуться назад</button>
+                <h1>На обучении есть психолог, который разберет каждый твой запрос, если будешь сталкиваться со сложностями во время обучения.</h1>
+                <p>Отправь сообщение, чтобы психолог связался с тобой</p>
             </div>
         </body>
         </html>
@@ -597,7 +587,7 @@ async def handle_alice_request(request: Request):
                 await bot.send_message(admin_id, error_text)
         except:
             pass
-        error_html = f"""
+        error_html = """
         <!DOCTYPE html>
         <html>
         <head>
@@ -605,20 +595,15 @@ async def handle_alice_request(request: Request):
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>Ошибка</title>
             <style>
-                body {{ font-family: Arial, sans-serif; background: #1a1a2e; color: #fff; padding: 20px; text-align: center; }}
-                .error-box {{ background: #16213e; padding: 30px; border-radius: 15px; max-width: 600px; margin: 50px auto; }}
-                h1 {{ color: #e94560; }}
-                .error-message {{ background: #0f3460; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: left; font-family: monospace; }}
-                .btn {{ background: #e94560; color: white; padding: 12px 30px; border: none; border-radius: 8px; cursor: pointer; margin-top: 20px; }}
+                body { font-family: Arial, sans-serif; background: #1a1a2e; color: #fff; padding: 20px; text-align: center; }
+                .error-box { background: #16213e; padding: 30px; border-radius: 15px; max-width: 600px; margin: 50px auto; }
+                h1 { color: #e94560; }
             </style>
         </head>
         <body>
             <div class="error-box">
-                <h1>😔 Произошла ошибка</h1>
-                <p>При загрузке чата возникла техническая проблема.</p>
-                <div class="error-message">{str(e)}</div>
-                <p>Пожалуйста, сообщите об этой ошибке в поддержку.</p>
-                <button class="btn" onclick="window.history.back()">Вернуться назад</button>
+                <h1>На обучении есть психолог, который разберет каждый твой запрос, если будешь сталкиваться со сложностями во время обучения.</h1>
+                <p>Отправь сообщение, чтобы психолог связался с тобой</p>
             </div>
         </body>
         </html>
@@ -676,7 +661,7 @@ async def handle_alice_request(request: Request):
                 await bot.send_message(admin_id, error_text)
         except:
             pass
-        error_html = f"""
+        error_html = """
         <!DOCTYPE html>
         <html>
         <head>
@@ -684,20 +669,15 @@ async def handle_alice_request(request: Request):
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>Ошибка</title>
             <style>
-                body {{ font-family: Arial, sans-serif; background: #1a1a2e; color: #fff; padding: 20px; text-align: center; }}
-                .error-box {{ background: #16213e; padding: 30px; border-radius: 15px; max-width: 600px; margin: 50px auto; }}
-                h1 {{ color: #e94560; }}
-                .error-message {{ background: #0f3460; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: left; font-family: monospace; }}
-                .btn {{ background: #e94560; color: white; padding: 12px 30px; border: none; border-radius: 8px; cursor: pointer; margin-top: 20px; }}
+                body { font-family: Arial, sans-serif; background: #1a1a2e; color: #fff; padding: 20px; text-align: center; }
+                .error-box { background: #16213e; padding: 30px; border-radius: 15px; max-width: 600px; margin: 50px auto; }
+                h1 { color: #e94560; }
             </style>
         </head>
         <body>
             <div class="error-box">
-                <h1>😔 Произошла ошибка</h1>
-                <p>При загрузке чата возникла техническая проблема.</p>
-                <div class="error-message">{str(e)}</div>
-                <p>Пожалуйста, сообщите об этой ошибке в поддержку.</p>
-                <button class="btn" onclick="window.history.back()">Вернуться назад</button>
+                <h1>На обучении есть психолог, который разберет каждый твой запрос, если будешь сталкиваться со сложностями во время обучения.</h1>
+                <p>Отправь сообщение, чтобы психолог связался с тобой</p>
             </div>
         </body>
         </html>
@@ -884,7 +864,7 @@ async def handle_alice_request(request: Request):
                 await bot.send_message(admin_id, error_text)
         except:
             pass
-        error_html = f"""
+        error_html = """
         <!DOCTYPE html>
         <html>
         <head>
@@ -892,20 +872,15 @@ async def handle_alice_request(request: Request):
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>Ошибка</title>
             <style>
-                body {{ font-family: Arial, sans-serif; background: #1a1a2e; color: #fff; padding: 20px; text-align: center; }}
-                .error-box {{ background: #16213e; padding: 30px; border-radius: 15px; max-width: 600px; margin: 50px auto; }}
-                h1 {{ color: #e94560; }}
-                .error-message {{ background: #0f3460; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: left; font-family: monospace; }}
-                .btn {{ background: #e94560; color: white; padding: 12px 30px; border: none; border-radius: 8px; cursor: pointer; margin-top: 20px; }}
+                body { font-family: Arial, sans-serif; background: #1a1a2e; color: #fff; padding: 20px; text-align: center; }
+                .error-box { background: #16213e; padding: 30px; border-radius: 15px; max-width: 600px; margin: 50px auto; }
+                h1 { color: #e94560; }
             </style>
         </head>
         <body>
             <div class="error-box">
-                <h1>😔 Произошла ошибка</h1>
-                <p>При загрузке чата возникла техническая проблема.</p>
-                <div class="error-message">{str(e)}</div>
-                <p>Пожалуйста, сообщите об этой ошибке в поддержку.</p>
-                <button class="btn" onclick="window.history.back()">Вернуться назад</button>
+                <h1>На обучении есть психолог, который разберет каждый твой запрос, если будешь сталкиваться со сложностями во время обучения.</h1>
+                <p>Отправь сообщение, чтобы психолог связался с тобой</p>
             </div>
         </body>
         </html>
@@ -963,7 +938,7 @@ async def handle_alice_request(request: Request):
                 await bot.send_message(admin_id, error_text)
         except:
             pass
-        error_html = f"""
+        error_html = """
         <!DOCTYPE html>
         <html>
         <head>
@@ -971,20 +946,15 @@ async def handle_alice_request(request: Request):
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>Ошибка</title>
             <style>
-                body {{ font-family: Arial, sans-serif; background: #1a1a2e; color: #fff; padding: 20px; text-align: center; }}
-                .error-box {{ background: #16213e; padding: 30px; border-radius: 15px; max-width: 600px; margin: 50px auto; }}
-                h1 {{ color: #e94560; }}
-                .error-message {{ background: #0f3460; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: left; font-family: monospace; }}
-                .btn {{ background: #e94560; color: white; padding: 12px 30px; border: none; border-radius: 8px; cursor: pointer; margin-top: 20px; }}
+                body { font-family: Arial, sans-serif; background: #1a1a2e; color: #fff; padding: 20px; text-align: center; }
+                .error-box { background: #16213e; padding: 30px; border-radius: 15px; max-width: 600px; margin: 50px auto; }
+                h1 { color: #e94560; }
             </style>
         </head>
         <body>
             <div class="error-box">
-                <h1>😔 Произошла ошибка</h1>
-                <p>При загрузке чата возникла техническая проблема.</p>
-                <div class="error-message">{str(e)}</div>
-                <p>Пожалуйста, сообщите об этой ошибке в поддержку.</p>
-                <button class="btn" onclick="window.history.back()">Вернуться назад</button>
+                <h1>На обучении есть психолог, который разберет каждый твой запрос, если будешь сталкиваться со сложностями во время обучения.</h1>
+                <p>Отправь сообщение, чтобы психолог связался с тобой</p>
             </div>
         </body>
         </html>
