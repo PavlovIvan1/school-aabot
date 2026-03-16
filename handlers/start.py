@@ -11,6 +11,7 @@ from aiogram import BaseMiddleware
 from aiogram.types import InputMediaVideo, InputMediaDocument
 from aiogram.types import TelegramObject, FSInputFile
 from aiogram import types
+from aiogram.exceptions import TelegramBadRequest
 import re
 
 import datetime
@@ -121,7 +122,11 @@ class SubMiddleware(BaseMiddleware):
         if config.BOT_IS_READY:
             return await handler(event, data)
 
-        return await event.answer("Бот перезагружается, попробуйте снова через 10 секунд", show_alert=True)
+        try:
+            return await event.answer("Бот перезагружается, попробуйте снова через 10 секунд", show_alert=True)
+        except TelegramBadRequest:
+            # Query is too old, ignore the error
+            pass
     
 
 class SecondSubMiddleware(BaseMiddleware):
@@ -942,6 +947,12 @@ async def command_start_handler(call: CallbackQuery) -> None:
 @start_router.message(SendHomeWork.homework)
 async def command_start_handler(message: Message, state: FSMContext) -> None:
     state_data = await state.get_data()
+    
+    # Check if lesson_id exists in state data
+    if "lesson_id" not in state_data:
+        await message.answer("Пожалуйста, выберите урок из меню для сдачи домашнего задания.")
+        return
+    
     user_data = db.get_user(message.from_user.id)
     users_flow = db.get_flow_by_email(user_data[0]['email'])
 

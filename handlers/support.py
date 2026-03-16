@@ -10,6 +10,7 @@ from aiogram.filters import StateFilter
 from aiogram import BaseMiddleware
 from aiogram.types import InputMediaVideo, InputMediaDocument
 from aiogram.types import TelegramObject, FSInputFile
+from aiogram.exceptions import TelegramBadRequest
 
 import datetime
 import asyncio
@@ -73,7 +74,10 @@ class SubMiddleware(BaseMiddleware):
         if config.BOT_IS_READY:
             return await handler(event, data)
 
-        return await event.answer("Бот перезагружается, попробуйте снова через 10 секунд", show_alert=True)
+        try:
+            return await event.answer("Бот перезагружается, попробуйте снова через 10 секунд", show_alert=True)
+        except TelegramBadRequest:
+            pass
     
 
 class SecondSubMiddleware(BaseMiddleware):
@@ -95,7 +99,10 @@ class SecondSubMiddleware(BaseMiddleware):
             
             await asyncio.sleep(5)
 
-        return await event.answer("Бот ещё не готов к работе, попробуйте позже", show_alert=True)
+        try:
+            return await event.answer("Бот ещё не готов к работе, попробуйте позже", show_alert=True)
+        except TelegramBadRequest:
+            pass
 
 
 support_router = Router()
