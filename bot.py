@@ -209,59 +209,95 @@ async def handle_alice_request(request: Request):
 # Функционал ЛС с трекером
 @app.get("/get_tracker_chat")
 async def handle_alice_request(request: Request):
-    user_id = str(request.url).split("user_id=")[-1].split("&")[0].replace("%40", "@") # TODO привести в нормальный вид
-    tracker_messages_list = db.get_trackers_messages_by_tg_id(int(user_id))
-    user_data = db.get_user(int(user_id))
-
-    if len(user_data) == 0:
-        return
-    
-    user_flow = db.get_flow_by_email(user_data[0]['email'])
-
     try:
-        tg_data = await bot.get_chat(user_id)
-        tg_username = tg_data.username
-        name = tg_data.first_name
-    except:
-        return
+        user_id = str(request.url).split("user_id=")[-1].split("&")[0].replace("%40", "@")
+        tracker_messages_list = db.get_trackers_messages_by_tg_id(int(user_id))
+        user_data = db.get_user(int(user_id))
 
-    async with aiofiles.open("html_pages/tracker_to_user.html", mode="r", encoding="utf-8") as f:
-        html_response = await f.read()
-
-    html_messages = ""
-
-    for message in tracker_messages_list:
-        message_from_type = "incoming" if message["from_user"] else "outgoing"
-        message_date = datetime.datetime.fromtimestamp(message["unix_time"]).strftime("%d.%m.%Y %H:%M")
-
-        html_messages += f'<div class="message {message_from_type}">{message["message_text"]}'
+        if len(user_data) == 0:
+            return HTMLResponse(content="<html><body><h1>Пользователь не найден</h1></body></html>", status_code=404)
         
-        if message["file_type"] == "photo":
-            file_info = await bot.get_file(message["file_id"])
-            file_path = f'static/{user_id}.jpg'
-            await bot.download_file(file_info.file_path, file_path)
-            html_messages += f'<img src="{file_path}">'
-        elif message["file_type"] in ["video", "video_note"]:
-            file_info = await bot.get_file(message["file_id"])
-            file_path = f'static/{user_id}.mp4'
-            await bot.download_file(file_info.file_path, file_path)
-            html_messages += f'<video controls><source src="{file_path}" type="video/mp4"></video>'
-        elif message["file_type"] in ["audio", "voice"]:
-            file_info = await bot.get_file(message["file_id"])
-            file_path = f'static/{user_id}.mp3'
-            await bot.download_file(file_info.file_path, file_path)
-            html_messages += f'<audio controls class="audio-player"><source src="{file_path}" type="audio/mpeg"></audio>'
-        elif message["file_type"] == "file":
-            file_info = await bot.get_file(message["file_id"])
-            file_path = f'static/{user_id}.{file_info.file_path.split(".")[-1]}'
-            await bot.download_file(file_info.file_path, file_path)
-            html_messages += f'<div class="file-attach"><div class="file-icon">📎</div><div>{file_path}</div></div>'
+        user_flow = db.get_flow_by_email(user_data[0]['email'])
 
-        html_messages += f'<div class="time">{message_date}</div></div>'
+        try:
+            tg_data = await bot.get_chat(user_id)
+            tg_username = tg_data.username
+            name = tg_data.first_name
+        except:
+            name = "User"
+            tg_username = "unknown"
 
-    html_response = html_response.replace("{MESSAGES_LIST}", html_messages).replace("{NAME}", name).replace("{USERNAME}", f"@{tg_username}").replace("{EMAIL}", user_data[0]['email']).replace("{FLOW}", user_flow).replace("{AVATAR}", name[0].upper()).replace("{USER_ID}", user_id)
+        async with aiofiles.open("html_pages/tracker_to_user.html", mode="r", encoding="utf-8") as f:
+            html_response = await f.read()
 
-    return HTMLResponse(content=html_response, status_code=200)
+        html_messages = ""
+
+        for message in tracker_messages_list:
+            message_from_type = "incoming" if message["from_user"] else "outgoing"
+            message_date = datetime.datetime.fromtimestamp(message["unix_time"]).strftime("%d.%m.%Y %H:%M")
+
+            html_messages += f'<div class="message {message_from_type}">{message["message_text"]}'
+            
+            if message["file_type"] == "photo":
+                file_info = await bot.get_file(message["file_id"])
+                file_path = f'static/{user_id}.jpg'
+                await bot.download_file(file_info.file_path, file_path)
+                html_messages += f'<img src="{file_path}">'
+            elif message["file_type"] in ["video", "video_note"]:
+                file_info = await bot.get_file(message["file_id"])
+                file_path = f'static/{user_id}.mp4'
+                await bot.download_file(file_info.file_path, file_path)
+                html_messages += f'<video controls><source src="{file_path}" type="video/mp4"></video>'
+            elif message["file_type"] in ["audio", "voice"]:
+                file_info = await bot.get_file(message["file_id"])
+                file_path = f'static/{user_id}.mp3'
+                await bot.download_file(file_info.file_path, file_path)
+                html_messages += f'<audio controls class="audio-player"><source src="{file_path}" type="audio/mpeg"></audio>'
+            elif message["file_type"] == "file":
+                file_info = await bot.get_file(message["file_id"])
+                file_path = f'static/{user_id}.{file_info.file_path.split(".")[-1]}'
+                await bot.download_file(file_info.file_path, file_path)
+                html_messages += f'<div class="file-attach"><div class="file-icon">📎</div><div>{file_path}</div></div>'
+
+            html_messages += f'<div class="time">{message_date}</div></div>'
+
+        html_response = html_response.replace("{MESSAGES_LIST}", html_messages).replace("{NAME}", name).replace("{USERNAME}", f"@{tg_username}").replace("{EMAIL}", user_data[0]['email']).replace("{FLOW}", user_flow).replace("{AVATAR}", name[0].upper()).replace("{USER_ID}", user_id)
+
+        return HTMLResponse(content=html_response, status_code=200)
+    except Exception as e:
+        error_text = f"⚠️ Ошибка при загрузке чата трекера\n\nURL: {request.url}\n\nОшибка: {str(e)}\n\n{traceback.format_exc()}"
+        try:
+            for admin_id in config.ADMINS_LIST:
+                await bot.send_message(admin_id, error_text)
+        except:
+            pass
+        error_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Ошибка</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; background: #1a1a2e; color: #fff; padding: 20px; text-align: center; }}
+                .error-box {{ background: #16213e; padding: 30px; border-radius: 15px; max-width: 600px; margin: 50px auto; }}
+                h1 {{ color: #e94560; }}
+                .error-message {{ background: #0f3460; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: left; font-family: monospace; }}
+                .btn {{ background: #e94560; color: white; padding: 12px 30px; border: none; border-radius: 8px; cursor: pointer; margin-top: 20px; }}
+            </style>
+        </head>
+        <body>
+            <div class="error-box">
+                <h1>😔 Произошла ошибка</h1>
+                <p>При загрузке чата возникла техническая проблема.</p>
+                <div class="error-message">{str(e)}</div>
+                <p>Пожалуйста, сообщите об этой ошибке в поддержку.</p>
+                <button class="btn" onclick="window.history.back()">Вернуться назад</button>
+            </div>
+        </body>
+        </html>
+        """
+        return HTMLResponse(content=error_html, status_code=500)
 
 
 @app.get("/get_user_tracker_chat")
@@ -314,7 +350,33 @@ async def handle_alice_request(request: Request):
                 await bot.send_message(admin_id, error_text)
         except:
             pass
-        return HTMLResponse(content=f"<html><body><h1>Ошибка 500</h1><p>{str(e)}</p></body></html>", status_code=500)
+        error_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Ошибка</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; background: #1a1a2e; color: #fff; padding: 20px; text-align: center; }}
+                .error-box {{ background: #16213e; padding: 30px; border-radius: 15px; max-width: 600px; margin: 50px auto; }}
+                h1 {{ color: #e94560; }}
+                .error-message {{ background: #0f3460; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: left; font-family: monospace; }}
+                .btn {{ background: #e94560; color: white; padding: 12px 30px; border: none; border-radius: 8px; cursor: pointer; margin-top: 20px; }}
+            </style>
+        </head>
+        <body>
+            <div class="error-box">
+                <h1>😔 Произошла ошибка</h1>
+                <p>При загрузке чата возникла техническая проблема.</p>
+                <div class="error-message">{str(e)}</div>
+                <p>Пожалуйста, сообщите об этой ошибке в поддержку.</p>
+                <button class="btn" onclick="window.history.back()">Вернуться назад</button>
+            </div>
+        </body>
+        </html>
+        """
+        return HTMLResponse(content=error_html, status_code=500)
 
 
 @app.websocket("/ws/user_to_tracker_chat/{user_id}")
@@ -473,103 +535,174 @@ async def handle_alice_request(request: Request):
 # Функционал с поддержкой
 @app.get("/get_support_chat")
 async def handle_alice_request(request: Request):
-    user_id = str(request.url).split("user_id=")[-1].split("&")[0].replace("%40", "@") # TODO привести в нормальный вид
-    support_messages_list = db.get_support_messages_by_tg_id(int(user_id))
-    user_data = db.get_user(int(user_id))
-
-    if len(user_data) == 0:
-        return
-    
-    user_flow = db.get_flow_by_email(user_data[0]['email'])
-
     try:
-        tg_data = await bot.get_chat(user_id)
-        tg_username = tg_data.username
-        name = tg_data.first_name
-    except:
-        return
+        user_id = str(request.url).split("user_id=")[-1].split("&")[0].replace("%40", "@")
+        support_messages_list = db.get_support_messages_by_tg_id(int(user_id))
+        user_data = db.get_user(int(user_id))
 
-    async with aiofiles.open("html_pages/support_to_user.html", mode="r", encoding="utf-8") as f:
-        html_response = await f.read()
-
-    html_messages = ""
-
-    for message in support_messages_list:
-        message_from_type = "incoming" if message["from_user"] else "outgoing"
-        message_date = datetime.datetime.fromtimestamp(message["unix_time"]).strftime("%d.%m.%Y %H:%M")
-
-        html_messages += f'<div class="message {message_from_type}">{message["message_text"]}'
+        if len(user_data) == 0:
+            return HTMLResponse(content="<html><body><h1>Пользователь не найден</h1></body></html>", status_code=404)
         
-        if message["file_type"] == "photo":
-            file_info = await bot.get_file(message["file_id"])
-            file_path = f'static/{user_id}.jpg'
-            await bot.download_file(file_info.file_path, file_path)
-            html_messages += f'<img src="{file_path}">'
-        elif message["file_type"] in ["video", "video_note"]:
-            file_info = await bot.get_file(message["file_id"])
-            file_path = f'static/{user_id}.mp4'
-            await bot.download_file(file_info.file_path, file_path)
-            html_messages += f'<video controls><source src="{file_path}" type="video/mp4"></video>'
-        elif message["file_type"] in ["audio", "voice"]:
-            file_info = await bot.get_file(message["file_id"])
-            file_path = f'static/{user_id}.mp3'
-            await bot.download_file(file_info.file_path, file_path)
-            html_messages += f'<audio controls class="audio-player"><source src="{file_path}" type="audio/mpeg"></audio>'
-        elif message["file_type"] == "file":
-            file_info = await bot.get_file(message["file_id"])
-            file_path = f'static/{user_id}.{file_info.file_path.split(".")[-1]}'
-            await bot.download_file(file_info.file_path, file_path)
-            html_messages += f'<div class="file-attach"><div class="file-icon">📎</div><div>{file_path}</div></div>'
+        user_flow = db.get_flow_by_email(user_data[0]['email'])
 
-        html_messages += f'<div class="time">{message_date}</div></div>'
+        try:
+            tg_data = await bot.get_chat(user_id)
+            tg_username = tg_data.username
+            name = tg_data.first_name
+        except:
+            name = "User"
+            tg_username = "unknown"
 
-    html_response = html_response.replace("{MESSAGES_LIST}", html_messages).replace("{NAME}", name).replace("{USERNAME}", f"@{tg_username}").replace("{EMAIL}", user_data[0]['email']).replace("{FLOW}", user_flow).replace("{AVATAR}", name[0].upper()).replace("{USER_ID}", user_id)
+        async with aiofiles.open("html_pages/support_to_user.html", mode="r", encoding="utf-8") as f:
+            html_response = await f.read()
 
-    return HTMLResponse(content=html_response, status_code=200)
+        html_messages = ""
+
+        for message in support_messages_list:
+            message_from_type = "incoming" if message["from_user"] else "outgoing"
+            message_date = datetime.datetime.fromtimestamp(message["unix_time"]).strftime("%d.%m.%Y %H:%M")
+
+            html_messages += f'<div class="message {message_from_type}">{message["message_text"]}'
+            
+            if message["file_type"] == "photo":
+                file_info = await bot.get_file(message["file_id"])
+                file_path = f'static/{user_id}.jpg'
+                await bot.download_file(file_info.file_path, file_path)
+                html_messages += f'<img src="{file_path}">'
+            elif message["file_type"] in ["video", "video_note"]:
+                file_info = await bot.get_file(message["file_id"])
+                file_path = f'static/{user_id}.mp4'
+                await bot.download_file(file_info.file_path, file_path)
+                html_messages += f'<video controls><source src="{file_path}" type="video/mp4"></video>'
+            elif message["file_type"] in ["audio", "voice"]:
+                file_info = await bot.get_file(message["file_id"])
+                file_path = f'static/{user_id}.mp3'
+                await bot.download_file(file_info.file_path, file_path)
+                html_messages += f'<audio controls class="audio-player"><source src="{file_path}" type="audio/mpeg"></audio>'
+            elif message["file_type"] == "file":
+                file_info = await bot.get_file(message["file_id"])
+                file_path = f'static/{user_id}.{file_info.file_path.split(".")[-1]}'
+                await bot.download_file(file_info.file_path, file_path)
+                html_messages += f'<div class="file-attach"><div class="file-icon">📎</div><div>{file_path}</div></div>'
+
+            html_messages += f'<div class="time">{message_date}</div></div>'
+
+        html_response = html_response.replace("{MESSAGES_LIST}", html_messages).replace("{NAME}", name).replace("{USERNAME}", f"@{tg_username}").replace("{EMAIL}", user_data[0]['email']).replace("{FLOW}", user_flow).replace("{AVATAR}", name[0].upper()).replace("{USER_ID}", user_id)
+
+        return HTMLResponse(content=html_response, status_code=200)
+    except Exception as e:
+        error_text = f"⚠️ Ошибка при загрузке чата поддержки\n\nURL: {request.url}\n\nОшибка: {str(e)}\n\n{traceback.format_exc()}"
+        try:
+            for admin_id in config.ADMINS_LIST:
+                await bot.send_message(admin_id, error_text)
+        except:
+            pass
+        error_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Ошибка</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; background: #1a1a2e; color: #fff; padding: 20px; text-align: center; }}
+                .error-box {{ background: #16213e; padding: 30px; border-radius: 15px; max-width: 600px; margin: 50px auto; }}
+                h1 {{ color: #e94560; }}
+                .error-message {{ background: #0f3460; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: left; font-family: monospace; }}
+                .btn {{ background: #e94560; color: white; padding: 12px 30px; border: none; border-radius: 8px; cursor: pointer; margin-top: 20px; }}
+            </style>
+        </head>
+        <body>
+            <div class="error-box">
+                <h1>😔 Произошла ошибка</h1>
+                <p>При загрузке чата возникла техническая проблема.</p>
+                <div class="error-message">{str(e)}</div>
+                <p>Пожалуйста, сообщите об этой ошибке в поддержку.</p>
+                <button class="btn" onclick="window.history.back()">Вернуться назад</button>
+            </div>
+        </body>
+        </html>
+        """
+        return HTMLResponse(content=error_html, status_code=500)
 
 
 @app.get("/get_user_support_chat")
 async def handle_alice_request(request: Request):
-    user_id = str(request.url).split("user_id=")[-1].split("&")[0].replace("%40", "@") # TODO привести в нормальный вид
-    support_messages_list = db.get_support_messages_by_tg_id(int(user_id))
+    try:
+        user_id = str(request.url).split("user_id=")[-1].split("&")[0].replace("%40", "@")
+        support_messages_list = db.get_support_messages_by_tg_id(int(user_id))
 
-    async with aiofiles.open("html_pages/user_to_support.html", mode="r", encoding="utf-8") as f:
-        html_response = await f.read()
+        async with aiofiles.open("html_pages/user_to_support.html", mode="r", encoding="utf-8") as f:
+            html_response = await f.read()
 
-    html_messages = ""
+        html_messages = ""
 
-    for message in support_messages_list:
-        message_from_type = "outgoing" if message["from_user"] else "incoming"
-        message_date = datetime.datetime.fromtimestamp(message["unix_time"]).strftime("%d.%m.%Y %H:%M")
+        for message in support_messages_list:
+            message_from_type = "outgoing" if message["from_user"] else "incoming"
+            message_date = datetime.datetime.fromtimestamp(message["unix_time"]).strftime("%d.%m.%Y %H:%M")
 
-        html_messages += f'<div class="message {message_from_type}">{message["message_text"]}'
-        
-        if message["file_type"] == "photo":
-            file_info = await bot.get_file(message["file_id"])
-            file_path = f'static/{user_id}.jpg'
-            await bot.download_file(file_info.file_path, file_path)
-            html_messages += f'<img src="{file_path}">'
-        elif message["file_type"] in ["video", "video_note"]:
-            file_info = await bot.get_file(message["file_id"])
-            file_path = f'static/{user_id}.mp4'
-            await bot.download_file(file_info.file_path, file_path)
-            html_messages += f'<video controls><source src="{file_path}" type="video/mp4"></video>'
-        elif message["file_type"] in ["audio", "voice"]:
-            file_info = await bot.get_file(message["file_id"])
-            file_path = f'static/{user_id}.mp3'
-            await bot.download_file(file_info.file_path, file_path)
-            html_messages += f'<audio controls class="audio-player"><source src="{file_path}" type="audio/mpeg"></audio>'
-        elif message["file_type"] == "file":
-            file_info = await bot.get_file(message["file_id"])
-            file_path = f'static/{user_id}.{file_info.file_path.split(".")[-1]}'
-            await bot.download_file(file_info.file_path, file_path)
-            html_messages += f'<div class="file-attach"><div class="file-icon">📎</div><div>{file_path}</div></div>'
+            html_messages += f'<div class="message {message_from_type}">{message["message_text"]}'
+            
+            if message["file_type"] == "photo":
+                file_info = await bot.get_file(message["file_id"])
+                file_path = f'static/{user_id}.jpg'
+                await bot.download_file(file_info.file_path, file_path)
+                html_messages += f'<img src="{file_path}">'
+            elif message["file_type"] in ["video", "video_note"]:
+                file_info = await bot.get_file(message["file_id"])
+                file_path = f'static/{user_id}.mp4'
+                await bot.download_file(file_info.file_path, file_path)
+                html_messages += f'<video controls><source src="{file_path}" type="video/mp4"></video>'
+            elif message["file_type"] in ["audio", "voice"]:
+                file_info = await bot.get_file(message["file_id"])
+                file_path = f'static/{user_id}.mp3'
+                await bot.download_file(file_info.file_path, file_path)
+                html_messages += f'<audio controls class="audio-player"><source src="{file_path}" type="audio/mpeg"></audio>'
+            elif message["file_type"] == "file":
+                file_info = await bot.get_file(message["file_id"])
+                file_path = f'static/{user_id}.{file_info.file_path.split(".")[-1]}'
+                await bot.download_file(file_info.file_path, file_path)
+                html_messages += f'<div class="file-attach"><div class="file-icon">📎</div><div>{file_path}</div></div>'
 
-        html_messages += f'<div class="time">{message_date}</div></div>'
+            html_messages += f'<div class="time">{message_date}</div></div>'
 
-    html_response = html_response.replace("{MESSAGES_LIST}", html_messages).replace("{USER_ID}", user_id)
+        html_response = html_response.replace("{MESSAGES_LIST}", html_messages).replace("{USER_ID}", user_id)
 
-    return HTMLResponse(content=html_response, status_code=200)
+        return HTMLResponse(content=html_response, status_code=200)
+    except Exception as e:
+        error_text = f"⚠️ Ошибка при загрузке мини-аппа поддержки\n\nURL: {request.url}\n\nОшибка: {str(e)}\n\n{traceback.format_exc()}"
+        try:
+            for admin_id in config.ADMINS_LIST:
+                await bot.send_message(admin_id, error_text)
+        except:
+            pass
+        error_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Ошибка</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; background: #1a1a2e; color: #fff; padding: 20px; text-align: center; }}
+                .error-box {{ background: #16213e; padding: 30px; border-radius: 15px; max-width: 600px; margin: 50px auto; }}
+                h1 {{ color: #e94560; }}
+                .error-message {{ background: #0f3460; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: left; font-family: monospace; }}
+                .btn {{ background: #e94560; color: white; padding: 12px 30px; border: none; border-radius: 8px; cursor: pointer; margin-top: 20px; }}
+            </style>
+        </head>
+        <body>
+            <div class="error-box">
+                <h1>😔 Произошла ошибка</h1>
+                <p>При загрузке чата возникла техническая проблема.</p>
+                <div class="error-message">{str(e)}</div>
+                <p>Пожалуйста, сообщите об этой ошибке в поддержку.</p>
+                <button class="btn" onclick="window.history.back()">Вернуться назад</button>
+            </div>
+        </body>
+        </html>
+        """
+        return HTMLResponse(content=error_html, status_code=500)
 
 
 @app.websocket("/ws/user_to_support_chat/{user_id}")
@@ -689,59 +822,95 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
 # Функционал с психологом
 @app.get("/get_psychologist_chat")
 async def handle_alice_request(request: Request):
-    user_id = str(request.url).split("user_id=")[-1].split("&")[0].replace("%40", "@") # TODO привести в нормальный вид
-    psychologist_messages_list = db.get_psychologist_messages_by_tg_id(int(user_id))
-    user_data = db.get_user(int(user_id))
-
-    if len(user_data) == 0:
-        return
-    
-    user_flow = db.get_flow_by_email(user_data[0]['email'])
-
     try:
-        tg_data = await bot.get_chat(user_id)
-        tg_username = tg_data.username
-        name = tg_data.first_name
-    except:
-        return
+        user_id = str(request.url).split("user_id=")[-1].split("&")[0].replace("%40", "@")
+        psychologist_messages_list = db.get_psychologist_messages_by_tg_id(int(user_id))
+        user_data = db.get_user(int(user_id))
 
-    async with aiofiles.open("html_pages/psychologist_to_user.html", mode="r", encoding="utf-8") as f:
-        html_response = await f.read()
-
-    html_messages = ""
-
-    for message in psychologist_messages_list:
-        message_from_type = "incoming" if message["from_user"] else "outgoing"
-        message_date = datetime.datetime.fromtimestamp(message["unix_time"]).strftime("%d.%m.%Y %H:%M")
-
-        html_messages += f'<div class="message {message_from_type}">{message["message_text"]}'
+        if len(user_data) == 0:
+            return HTMLResponse(content="<html><body><h1>Пользователь не найден</h1></body></html>", status_code=404)
         
-        if message["file_type"] == "photo":
-            file_info = await bot.get_file(message["file_id"])
-            file_path = f'static/{user_id}.jpg'
-            await bot.download_file(file_info.file_path, file_path)
-            html_messages += f'<img src="{file_path}">'
-        elif message["file_type"] in ["video", "video_note"]:
-            file_info = await bot.get_file(message["file_id"])
-            file_path = f'static/{user_id}.mp4'
-            await bot.download_file(file_info.file_path, file_path)
-            html_messages += f'<video controls><source src="{file_path}" type="video/mp4"></video>'
-        elif message["file_type"] in ["audio", "voice"]:
-            file_info = await bot.get_file(message["file_id"])
-            file_path = f'static/{user_id}.mp3'
-            await bot.download_file(file_info.file_path, file_path)
-            html_messages += f'<audio controls class="audio-player"><source src="{file_path}" type="audio/mpeg"></audio>'
-        elif message["file_type"] == "file":
-            file_info = await bot.get_file(message["file_id"])
-            file_path = f'static/{user_id}.{file_info.file_path.split(".")[-1]}'
-            await bot.download_file(file_info.file_path, file_path)
-            html_messages += f'<div class="file-attach"><div class="file-icon">📎</div><div>{file_path}</div></div>'
+        user_flow = db.get_flow_by_email(user_data[0]['email'])
 
-        html_messages += f'<div class="time">{message_date}</div></div>'
+        try:
+            tg_data = await bot.get_chat(user_id)
+            tg_username = tg_data.username
+            name = tg_data.first_name
+        except:
+            name = "User"
+            tg_username = "unknown"
 
-    html_response = html_response.replace("{MESSAGES_LIST}", html_messages).replace("{NAME}", name).replace("{USERNAME}", f"@{tg_username}").replace("{EMAIL}", user_data[0]['email']).replace("{FLOW}", user_flow).replace("{AVATAR}", name[0].upper()).replace("{USER_ID}", user_id)
+        async with aiofiles.open("html_pages/psychologist_to_user.html", mode="r", encoding="utf-8") as f:
+            html_response = await f.read()
 
-    return HTMLResponse(content=html_response, status_code=200)
+        html_messages = ""
+
+        for message in psychologist_messages_list:
+            message_from_type = "incoming" if message["from_user"] else "outgoing"
+            message_date = datetime.datetime.fromtimestamp(message["unix_time"]).strftime("%d.%m.%Y %H:%M")
+
+            html_messages += f'<div class="message {message_from_type}">{message["message_text"]}'
+            
+            if message["file_type"] == "photo":
+                file_info = await bot.get_file(message["file_id"])
+                file_path = f'static/{user_id}.jpg'
+                await bot.download_file(file_info.file_path, file_path)
+                html_messages += f'<img src="{file_path}">'
+            elif message["file_type"] in ["video", "video_note"]:
+                file_info = await bot.get_file(message["file_id"])
+                file_path = f'static/{user_id}.mp4'
+                await bot.download_file(file_info.file_path, file_path)
+                html_messages += f'<video controls><source src="{file_path}" type="video/mp4"></video>'
+            elif message["file_type"] in ["audio", "voice"]:
+                file_info = await bot.get_file(message["file_id"])
+                file_path = f'static/{user_id}.mp3'
+                await bot.download_file(file_info.file_path, file_path)
+                html_messages += f'<audio controls class="audio-player"><source src="{file_path}" type="audio/mpeg"></audio>'
+            elif message["file_type"] == "file":
+                file_info = await bot.get_file(message["file_id"])
+                file_path = f'static/{user_id}.{file_info.file_path.split(".")[-1]}'
+                await bot.download_file(file_info.file_path, file_path)
+                html_messages += f'<div class="file-attach"><div class="file-icon">📎</div><div>{file_path}</div></div>'
+
+            html_messages += f'<div class="time">{message_date}</div></div>'
+
+        html_response = html_response.replace("{MESSAGES_LIST}", html_messages).replace("{NAME}", name).replace("{USERNAME}", f"@{tg_username}").replace("{EMAIL}", user_data[0]['email']).replace("{FLOW}", user_flow).replace("{AVATAR}", name[0].upper()).replace("{USER_ID}", user_id)
+
+        return HTMLResponse(content=html_response, status_code=200)
+    except Exception as e:
+        error_text = f"⚠️ Ошибка при загрузке чата психолога\n\nURL: {request.url}\n\nОшибка: {str(e)}\n\n{traceback.format_exc()}"
+        try:
+            for admin_id in config.ADMINS_LIST:
+                await bot.send_message(admin_id, error_text)
+        except:
+            pass
+        error_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Ошибка</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; background: #1a1a2e; color: #fff; padding: 20px; text-align: center; }}
+                .error-box {{ background: #16213e; padding: 30px; border-radius: 15px; max-width: 600px; margin: 50px auto; }}
+                h1 {{ color: #e94560; }}
+                .error-message {{ background: #0f3460; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: left; font-family: monospace; }}
+                .btn {{ background: #e94560; color: white; padding: 12px 30px; border: none; border-radius: 8px; cursor: pointer; margin-top: 20px; }}
+            </style>
+        </head>
+        <body>
+            <div class="error-box">
+                <h1>😔 Произошла ошибка</h1>
+                <p>При загрузке чата возникла техническая проблема.</p>
+                <div class="error-message">{str(e)}</div>
+                <p>Пожалуйста, сообщите об этой ошибке в поддержку.</p>
+                <button class="btn" onclick="window.history.back()">Вернуться назад</button>
+            </div>
+        </body>
+        </html>
+        """
+        return HTMLResponse(content=error_html, status_code=500)
 
 
 @app.get("/get_user_psychologist_chat")
@@ -794,7 +963,33 @@ async def handle_alice_request(request: Request):
                 await bot.send_message(admin_id, error_text)
         except:
             pass
-        return HTMLResponse(content=f"<html><body><h1>Ошибка 500</h1><p>{str(e)}</p></body></html>", status_code=500)
+        error_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Ошибка</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; background: #1a1a2e; color: #fff; padding: 20px; text-align: center; }}
+                .error-box {{ background: #16213e; padding: 30px; border-radius: 15px; max-width: 600px; margin: 50px auto; }}
+                h1 {{ color: #e94560; }}
+                .error-message {{ background: #0f3460; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: left; font-family: monospace; }}
+                .btn {{ background: #e94560; color: white; padding: 12px 30px; border: none; border-radius: 8px; cursor: pointer; margin-top: 20px; }}
+            </style>
+        </head>
+        <body>
+            <div class="error-box">
+                <h1>😔 Произошла ошибка</h1>
+                <p>При загрузке чата возникла техническая проблема.</p>
+                <div class="error-message">{str(e)}</div>
+                <p>Пожалуйста, сообщите об этой ошибке в поддержку.</p>
+                <button class="btn" onclick="window.history.back()">Вернуться назад</button>
+            </div>
+        </body>
+        </html>
+        """
+        return HTMLResponse(content=error_html, status_code=500)
 
 
 @app.websocket("/ws/user_to_psychologist_chat/{user_id}")
