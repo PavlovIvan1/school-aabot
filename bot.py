@@ -906,6 +906,12 @@ async def handle_alice_request(request: Request):
         return HTMLResponse(content=error_html, status_code=500)
 
 
+# Test endpoint to verify server is working
+@app.get("/test")
+async def test_endpoint():
+    return {"status": "ok"}
+
+
 @app.get("/get_user_psychologist_chat")
 async def handle_alice_request(request: Request):
     try:
@@ -914,8 +920,10 @@ async def handle_alice_request(request: Request):
         if not user_id:
             raise ValueError("user_id not found in query parameters")
         
+        # Get messages from database
         psychologist_messages_list = db.get_psychologist_messages_by_tg_id(int(user_id))
 
+        # Read HTML template
         async with aiofiles.open("html_pages/user_to_psychologist.html", mode="r", encoding="utf-8") as f:
             html_response = await f.read()
 
