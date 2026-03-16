@@ -28,6 +28,36 @@ import config
 db = database.MySQL()
 
 
+async def add_user_to_spreadsheet(user_id: int, email: str, flow: str, bot):
+    """Добавляет пользователя в Google Таблицу если его там нет"""
+    import gspread_asyncio
+    from google.oauth2.service_account import Credentials
+    
+    try:
+        # Проверяем, не добавлен ли уже пользователь
+        is_in_added = db.is_email_in_added_api_users(email)
+        if is_in_added:
+            return  # Уже добавлен
+        
+        db.add_email_to_added_api_users(email)
+        db.add_to_link_access(str(user_id), email.lower().strip(), flow)
+        
+        # Добавляем в Google Таблицу
+        creds = Credentials.from_service_account_file("credentials.json")
+        scoped = creds.with_scopes([
+            'https://www.googleapis.com/auth/spreadsheets',
+            'https://www.googleapis.com/auth/drive'
+        ])
+        agcm = gspread_asyncio.AioGspreadServiceAccount(from_credentials=scoped)
+        agc = await agcm.authorize()
+        ss_2 = await agc.open_by_url(config.SPREADSHEET_URL_USERS)
+        table = await ss_2.get_worksheet_by_id(0)
+        await table.append_row([email.lower().strip(), -1002572458943, flow, "", -1003545567896], value_input_option="USER_ENTERED")
+    except Exception as e:
+        # Логируем ошибку только в консоль
+        print(f"Ошибка при добавлении в таблицу: {email} - {e}")
+
+
 class SubMiddleware(BaseMiddleware):
     async def __call__(
         self,
@@ -165,6 +195,9 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
     state_data = await state.get_data()
     user_data = db.get_user(message.from_user.id)
     users_flow = db.get_flow_by_email(user_data[0]['email'])
+
+    # Добавляем пользователя в Google Таблицу если его там нет
+    await add_user_to_spreadsheet(message.from_user.id, user_data[0]['email'], users_flow, message.bot)
 
     try:
         await message.bot.edit_message_reply_markup(chat_id=message.chat.id, message_id=state_data['message_id'], reply_markup=None)
