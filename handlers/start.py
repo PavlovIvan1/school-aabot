@@ -1080,7 +1080,7 @@ async def send_congratulation_message(message: Message, lesson_id: int, user_id)
     done_homework_ids = db.get_done_homework_ids(user_id)
     required_homework = db.get_required_homework_ids(users_flow)
 
-    if lesson_id not in required_homework:
+    if lesson_id not in required_homework and lesson_id not in config.IMPORTANT_HOMEWORKS_IDS:
         return
     
     print(2)
@@ -1146,20 +1146,32 @@ async def flapper(message: types.Message):
     if message.from_user.id not in config.ADMINS_LIST:
         return
     elif len(message.text.split()) != 3:
-        return await message.answer('Неправильная команда. Отправьте: /flapper TG_ID ID_урока')
+        return await message.answer('Неправильная команда. Отправьте: /flapper TG_ID ID_урока или /flapper @username ID_урока')
     
-    user_data = db.get_user(message.text.split()[1])
-    if len(user_data) == 0:
-        return await message.answer('Пользователь не найден')
-
+    user_param = message.text.split()[1]
     lesson_id = message.text.split()[2]
+    
+    # Если передан @username, пробуем получить ID через Telegram API
+    if user_param.startswith('@'):
+        try:
+            chat = await message.bot.get_chat(user_param)
+            user_id = str(chat.id)
+        except Exception as e:
+            return await message.answer(f'Пользователь {user_param} не найден. Убедитесь, что бот когда-либо взаимодействовал с этим пользователем.')
+    else:
+        user_id = user_param
+    
+    user_data = db.get_user(user_id)
+    if len(user_data) == 0:
+        return await message.answer('Пользователь не найден в базе данных')
+
     users_flow = db.get_flow_by_email(user_data[0]['email'])
     lesson_data = db.get_lesson(lesson_id, users_flow)
 
     if lesson_data is None:
         return await message.answer('Урок не найден')
 
-    await send_congratulation_message(message, int(lesson_id), message.text.split()[1])
+    await send_congratulation_message(message, int(lesson_id), user_id)
     await message.answer("Хлопушка успешно отправлена!")
 
 
@@ -1445,6 +1457,7 @@ async def command_start_handler(message: Message) -> None:
             pass
 
         db.edit_homework(homework_data[0]["homework_id"], status='✅', comment=f'{user_name}, ты классно выполнила домашние задание. Корректировок нет, я принимаю его.', check_time=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        await send_congratulation_message(message, int(homework_data[0]['lesson_id']), int(homework_data[0]['user_data'].split()[-1]))
     elif message.text.splitlines()[0].startswith('+'): # Трекер принял задание
         message_text = message.text[1:].strip()
         db.edit_homework(homework_data[0]["homework_id"], status='✅', comment=message_text, check_time=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
