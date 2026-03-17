@@ -450,7 +450,7 @@ async def command_start_handler(call: CallbackQuery) -> None:
                 homework_list.append({'name': f'{module} - {homework_name}', 'id': homework["lesson_id"]})
 
     elif homework_type == 'obligatory':
-        text = 'Список обязательных домашних заданий\n\n❗️Если в строке <b>несколько заданий</b> — выберите <b>любое</b> из них.'
+        text = 'Список обязательных домашних заданий:'
         done_lessons, rework_lessons, sent_lessons, check_lessons = [], [], [], []
 
         for homework in homework_data:

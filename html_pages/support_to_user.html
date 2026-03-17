@@ -168,6 +168,54 @@ body {
 .send-btn:active {
   transform: scale(0.96);
 }
+
+.attach-btn {
+  background: #2f6ea5;
+  border: none;
+  border-radius: 20px;
+  width: 40px;
+  height: 40px;
+  color: white;
+  font-size: 18px;
+  cursor: pointer;
+  transition: 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attach-btn:hover {
+  background: #3a7fc0;
+}
+
+.preview-container {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  background: #17212b;
+  border-top: 1px solid #2b3a4a;
+}
+
+.preview-image {
+  max-width: 150px;
+  max-height: 150px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.preview-remove {
+  background: #c94c4c;
+  border: none;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  color: white;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 </style>
 </head>
 
@@ -190,8 +238,15 @@ body {
 </div>
 
 <div class="input-area">
+  <input type="file" id="fileInput" accept="image/*" onchange="handleFileSelect(event)">
+  <button class="attach-btn" onclick="document.getElementById('fileInput').click()">📎</button>
   <textarea id="msgInput" rows="1" placeholder="Написать сообщение..."></textarea>
   <button class="send-btn" onclick="sendMessage()">➤</button>
+</div>
+
+<div class="preview-container" id="previewContainer" style="display: none;">
+  <img id="previewImg" class="preview-image">
+  <button class="preview-remove" onclick="removePreview()">✕</button>
 </div>
 
 <script>
@@ -217,7 +272,9 @@ input.addEventListener("input", () => {
 
 /* ---------- MESSAGE ---------- */
 
-function addMessage(text, type, unixTime=null) {
+let selectedImageBase64 = null;
+
+function addMessage(text, type, unixTime=null, imageUrl=null) {
 
   const msg = document.createElement("div");
   msg.classList.add("message", type);
@@ -226,8 +283,15 @@ function addMessage(text, type, unixTime=null) {
       ? new Date(unixTime * 1000).toLocaleString()
       : new Date().toLocaleString();
 
+  let content = text ? text.replace(/</g, "&lt;").replace(/>/g, "&gt;") : "";
+
+  // Если есть изображение
+  if (imageUrl) {
+    content += `<img src="${imageUrl}" style="max-width: 200px; max-height: 200px; border-radius: 8px; margin-bottom: 6px;">`;
+  }
+
   msg.innerHTML = `
-      ${text}
+      ${content}
       <div class="time">${time}</div>
   `;
 
@@ -235,13 +299,93 @@ function addMessage(text, type, unixTime=null) {
   scrollToBottom();
 }
 
+/* ---------- FILE SELECT ---------- */
+
+function handleFileSelect(event) {
+  const file = event.target.files[0];
+  
+  if (!file) return;
+  
+  // Проверяем что это изображение
+  if (!file.type.startsWith('image/')) {
+    alert('Пожалуйста, выберите изображение');
+    return;
+  }
+  
+  const reader = new FileReader();
+  
+  reader.onload = function(e) {
+    const img = new Image();
+    
+    img.onload = function() {
+      // Создаем canvas для сжатия
+      const canvas = document.createElement('canvas');
+      let width = img.width;
+      let height = img.height;
+      
+      // Максимальный размер
+      const maxSize = 800;
+      
+      if (width > maxSize || height > maxSize) {
+        if (width > height) {
+          height = (height / width) * maxSize;
+          width = maxSize;
+        } else {
+          width = (width / height) * maxSize;
+          height = maxSize;
+        }
+      }
+      
+      canvas.width = width;
+      canvas.height = height;
+      
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      
+      // Конвертируем в base64 с качеством 40%
+      selectedImageBase64 = canvas.toDataURL('image/jpeg', 0.4);
+      
+      // Показываем preview
+      const previewContainer = document.getElementById('previewContainer');
+      const previewImg = document.getElementById('previewImg');
+      
+      previewImg.src = selectedImageBase64;
+      previewImg.className = 'preview-image';
+      previewContainer.style.display = 'flex';
+    };
+    
+    img.src = e.target.result;
+  };
+  
+  reader.readAsDataURL(file);
+}
+
+function removePreview() {
+  selectedImageBase64 = null;
+  document.getElementById('previewContainer').style.display = 'none';
+  document.getElementById('fileInput').value = '';
+}
+
 /* ---------- SEND ---------- */
 
 function sendMessage() {
   const text = input.value.trim();
-  if (!text) return;
-
-  ws.send(JSON.stringify({ message: text }));
+  
+  if (!text && !selectedImageBase64) return;
+  
+  if (selectedImageBase64) {
+    ws.send(JSON.stringify({
+      message: text,
+      image: selectedImageBase64
+    }));
+    
+    // Очищаем preview
+    selectedImageBase64 = null;
+    document.getElementById('previewContainer').style.display = 'none';
+    document.getElementById('fileInput').value = '';
+  } else {
+    ws.send(JSON.stringify({ message: text }));
+  }
 
   input.value = "";
   input.style.height = "auto";
@@ -319,7 +463,8 @@ function connectWS() {
       addMessage(
         data.text,
         messageType,
-        data.unix_time
+        data.unix_time,
+        data.image || null
       );
     }
   };

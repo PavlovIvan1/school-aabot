@@ -316,7 +316,7 @@ function handleFileSelect(event) {
       ctx.drawImage(img, 0, 0, width, height);
 
       // Конвертируем в base64 с качеством 80%
-      selectedImageBase64 = canvas.toDataURL('image/jpeg', 0.8);
+      selectedImageBase64 = canvas.toDataURL('image/jpeg', 0.4);
 
       // Показываем превью
       const previewContainer = document.getElementById('previewContainer');
