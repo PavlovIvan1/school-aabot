@@ -552,6 +552,10 @@ async def homework_is_done(call: CallbackQuery) -> None:
 
 @start_router.message(GetAccess.email)
 async def command_start_handler(message: Message, state: FSMContext) -> None:
+    if not message.text:
+        await message.answer("Пожалуйста, введите email текстовым сообщением")
+        return
+    
     is_access = db.is_email_in_users_access(message.text.lower())
 
     if is_access:
