@@ -455,6 +455,14 @@ function connectWS() {
       return;
     }
 
+    if (data.type === "error") {
+      alert(data.message);
+      // Блокируем отправку сообщений
+      document.getElementById('msgInput').disabled = true;
+      document.querySelector('.send-btn').disabled = true;
+      return;
+    }
+
     if (data.type === "message") {
 
       const messageType =

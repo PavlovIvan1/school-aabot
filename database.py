@@ -49,6 +49,11 @@ class MySQL:
         self.cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
         return self.cursor.fetchall()
     
+    def get_user_by_email_with_valid_tg_id(self, email):
+        """Получает пользователя по email с ненулевым tg_id"""
+        self.cursor.execute("SELECT * FROM users WHERE email = %s AND tg_id IS NOT NULL AND tg_id != 0", (email,))
+        return self.cursor.fetchone()
+    
     def delete_homework_by_tg_id(self, tg_id):
         self.cursor.execute("DELETE FROM homework WHERE tg_id = %s", (tg_id,))
         self.database.commit()

@@ -122,3 +122,7 @@ AUTOMATIC_STRATEGY_LESSONS = {
     "На чем я буду зарабатывать?": 28,
     "Что мне нужно сделать?": 5
 }
+
+# GetCourse Integration
+GETCOURSE_API_KEY = env("GETCOURSE_API_KEY", None)
+GETCOURSE_WEBHOOK_SECRET = env("GETCOURSE_WEBHOOK_SECRET", None)

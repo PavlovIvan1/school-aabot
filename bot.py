@@ -110,6 +110,88 @@ async def handle_alice_request(request: Request):
         except:
             pass
 
+# ============ GETCOURSE WEBHOOK ============
+@app.post("/webhook/getcourse")
+async def getcourse_webhook(request: Request):
+    """Webhook для приёма данных от GetCourse при создании нового заказа"""
+    try:
+        data = await request.json()
+        
+        # GetCourse может отправлять данные в разных форматах
+        # Пробуем получить email пользователя и данные о заказе
+        
+        email = None
+        flow = None
+        
+        # Вариант 1: данные в корне
+        if isinstance(data, dict):
+            email = data.get('email') or data.get('user_email') or data.get('user', {}).get('email')
+            flow = data.get('flow') or data.get('stream') or data.get('group')
+        
+        # Вариант 2: данные в user object
+        if not email and isinstance(data.get('user'), dict):
+            email = data['user'].get('email')
+        
+        # Вариант 3: данные в deal object  
+        if isinstance(data.get('deal'), dict):
+            if not email:
+                email = data['deal'].get('user_email') or data['deal'].get('email')
+        
+        if not email:
+            # Пробуем получить из разных полей
+            for key in ['email', 'user_email', 'contact_email', 'client_email']:
+                if key in data:
+                    email = data[key]
+                    break
+        
+        if not email:
+            return {"success": false, "error": "Email not found"}
+        
+        # Проверяем, есть ли уже пользователь
+        is_email_in_users_access = db.is_email_in_users_access(email)
+        is_email_in_added_api_users = db.is_email_in_added_api_users(email)
+        
+        if is_email_in_users_access or is_email_in_added_api_users:
+            return {"success": true, "message": "User already exists"}
+        
+        # Определяем поток/группу
+        if not flow:
+            # Пробуем получить из group_name
+            group = data.get('group_name') or data.get('group')
+            if isinstance(group, list):
+                flow = group[0] if group else None
+            else:
+                flow = group
+        
+        # Добавляем пользователя
+        db.add_email_to_added_api_users(email)
+        
+        try:
+            agc = await agcm.authorize()
+            ss_2 = await agc.open_by_url(config.SPREADSHEET_URL_USERS)
+            table = await ss_2.get_worksheet_by_id(0)
+            
+            # Определяем chat_id трекера (по умолчанию)
+            tracker_chat_id = -1002572458943
+            
+            await table.append_row([email.lower().strip(), tracker_chat_id, flow or "", "", -1003545567896], value_input_option="USER_ENTERED")
+            
+            try:
+                await bot.send_message(config.LOG_CHAT_ID, f'Добавлен из webhook {email}, поток: {flow} (GetCourse Webhook)')
+            except:
+                pass
+                
+        except Exception as e:
+            try:
+                await bot.send_message(config.LOG_CHAT_ID, f'@infinityqqqq Не могу добавить {email} (GetCourse Webhook): {e}')
+            except:
+                pass
+        
+        return {"success": true}
+    
+    except Exception as e:
+        return {"success": false, "error": str(e)}
+
 """@app.get("/get_support_chat")
 async def handle_alice_request(request: Request):
     user_id = request.query_params.get("user_id", "")
@@ -221,18 +303,29 @@ async def handle_alice_request(request: Request):
         user_id = request.query_params.get("user_id", "")
         if not user_id:
             raise ValueError("user_id not found in query parameters")
-        tracker_messages_list = db.get_trackers_messages_by_tg_id(int(user_id))
-        user_data = db.get_user(int(user_id))
+        
+        # Проверяем, что user_id число
+        try:
+            user_id_int = int(user_id)
+        except ValueError:
+            return HTMLResponse(content="<html><body><h1>Неверный ID пользователя</h1></body></html>", status_code=400)
+        
+        # Проверяем, что user_id валидный (не 0)
+        if user_id_int == 0:
+            return HTMLResponse(content="<html><body><h1>У ученика нет Telegram аккаунта. Попросите ученика написать боту /start</h1></body></html>", status_code=400)
+        
+        tracker_messages_list = db.get_trackers_messages_by_tg_id(user_id_int)
+        user_data = db.get_user(user_id_int)
 
         if len(user_data) == 0:
-            return HTMLResponse(content="<html><body><h1>Пользователь не найден</h1></body></html>", status_code=404)
+            return HTMLResponse(content="<html><body><h1>Ученик не найден в базе. Возможно, ученик ещё не написал боту /start</h1></body></html>", status_code=404)
         
         user_flow = db.get_flow_by_email(user_data[0]['email'])
 
         try:
             tg_data = await bot.get_chat(user_id)
-            tg_username = tg_data.username
-            name = tg_data.first_name
+            tg_username = tg_data.username if tg_data.username else "(без username)"
+            name = tg_data.first_name if tg_data.first_name else "Пользователь"
         except:
             name = "User"
             tg_username = "unknown"
@@ -455,11 +548,11 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
             if text and not image_base64:
                 try:
                     tg_data = await bot.get_chat(user_id)
-                    tg_username = tg_data.username
-                    tg_name = tg_data.first_name
+                    tg_username = tg_data.username if tg_data.username else "(без username)"
+                    tg_name = tg_data.first_name if tg_data.first_name else "Пользователь"
                 except:
-                    tg_username = None
-                    tg_name = None
+                    tg_username = "(неизвестно)"
+                    tg_name = "Пользователь"
 
                 try:
                     await bot.send_message(int(tracker_chat_id), f'🆕 Новое сообщение от пользователя {tg_name} @{tg_username} ({user_data[0]["email"].lower()} Поток: {users_flow}) в Web версии (Техническая информация: {user_id})\n\n{text}', reply_markup=keyboard.web_app_tracker_chat_keyboard(user_id))
@@ -484,9 +577,27 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
         config.ws_connections[user_id].append(websocket)
 
     user_data = db.get_user(int(user_id))
-    tracker_chat_id = config.USERS_ADDITIONAL_INFO[
-        user_data[0]["email"].lower()
-    ]["tracker_chat_id"]
+    
+    # Проверяем, есть ли пользователь в базе
+    if len(user_data) == 0:
+        await websocket.send_json({
+            "type": "error",
+            "message": "Пользователь не найден в базе данных"
+        })
+        await websocket.close()
+        return
+    
+    user_email = user_data[0]["email"].lower()
+    
+    # Проверяем, есть ли email в конфиге
+    if user_email not in config.USERS_ADDITIONAL_INFO:
+        tracker_chat_id = ""
+    else:
+        tracker_chat_id = config.USERS_ADDITIONAL_INFO[user_email].get("tracker_chat_id", "")
+    
+    # Если tracker_chat_id пустой, используем значение по умолчанию
+    if not tracker_chat_id:
+        tracker_chat_id = "-1002572458943"
 
     try:
         while True:
@@ -580,8 +691,8 @@ async def handle_alice_request(request: Request):
         for user in users_list:
             try:
                 tg_data = await bot.get_chat(user["tg_id"])
-                tg_username = tg_data.username
-                name = tg_data.first_name
+                tg_username = tg_data.username if tg_data.username else "(без username)"
+                name = tg_data.first_name if tg_data.first_name else "Пользователь"
             except:
                 tg_username = "Не найден"
                 name = "Не найден"
