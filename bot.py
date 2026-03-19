@@ -76,14 +76,48 @@ app.add_middleware(
 )
 
 @app.post("/add_data")
+@app.get("/add_data")
 async def handle_alice_request(request: Request):
     # Use query_params for proper URL parsing
     email = request.query_params.get("email", "")
     flow = request.query_params.get("flow", "")
     user_id = request.query_params.get("user_id", "")
     
+    # Log what we received for debugging
+    print(f"[add_data] Received: email={email}, user_id={user_id}, flow={flow}")
+    
+    # Check if the values are still template placeholders (not resolved by GETcourse)
+    if email and ('{' in email or '}' in email):
+        print(f"[add_data] WARNING: Email contains template placeholders: {email}")
+        # Try to get from JSON body for POST requests
+        if request.method == "POST":
+            try:
+                body = await request.json()
+                email = body.get("email") or email
+                user_id = body.get("user_id") or user_id
+                flow = body.get("flow") or flow
+                print(f"[add_data] After JSON parse: email={email}, user_id={user_id}, flow={flow}")
+            except:
+                pass
+    
+    # Check if values look like unresolved templates
+    template_patterns = ['{', '}', '{{', '}}', 'object.', 'user.', 'null', 'undefined']
+    is_template = any(pattern in str(email) for pattern in template_patterns) or \
+                  any(pattern in str(user_id) for pattern in template_patterns)
+    
+    if is_template:
+        print(f"[add_data] ERROR: Parameters appear to be unresolved templates!")
+        return {
+            "success": False, 
+            "error": "Template not resolved",
+            "received": {"email": email, "user_id": user_id, "flow": flow}
+        }
+    
     if not email or not flow or not user_id:
-        raise ValueError("Missing required parameters")
+        return {
+            "success": False, 
+            "error": f"Missing required parameters: email={email}, user_id={user_id}, flow={flow}"
+        }
 
     is_email_in_users_access = db.is_email_in_users_access(email)
     is_email_in_added_api_users = db.is_email_in_added_api_users(email)
