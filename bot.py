@@ -76,48 +76,13 @@ app.add_middleware(
 )
 
 @app.post("/add_data")
-@app.get("/add_data")
 async def handle_alice_request(request: Request):
-    # Use query_params for proper URL parsing
     email = request.query_params.get("email", "")
     flow = request.query_params.get("flow", "")
     user_id = request.query_params.get("user_id", "")
     
-    # Log what we received for debugging
-    print(f"[add_data] Received: email={email}, user_id={user_id}, flow={flow}")
-    
-    # Check if the values are still template placeholders (not resolved by GETcourse)
-    if email and ('{' in email or '}' in email):
-        print(f"[add_data] WARNING: Email contains template placeholders: {email}")
-        # Try to get from JSON body for POST requests
-        if request.method == "POST":
-            try:
-                body = await request.json()
-                email = body.get("email") or email
-                user_id = body.get("user_id") or user_id
-                flow = body.get("flow") or flow
-                print(f"[add_data] After JSON parse: email={email}, user_id={user_id}, flow={flow}")
-            except:
-                pass
-    
-    # Check if values look like unresolved templates
-    template_patterns = ['{', '}', '{{', '}}', 'object.', 'user.', 'null', 'undefined']
-    is_template = any(pattern in str(email) for pattern in template_patterns) or \
-                  any(pattern in str(user_id) for pattern in template_patterns)
-    
-    if is_template:
-        print(f"[add_data] ERROR: Parameters appear to be unresolved templates!")
-        return {
-            "success": False, 
-            "error": "Template not resolved",
-            "received": {"email": email, "user_id": user_id, "flow": flow}
-        }
-    
     if not email or not flow or not user_id:
-        return {
-            "success": False, 
-            "error": f"Missing required parameters: email={email}, user_id={user_id}, flow={flow}"
-        }
+        raise ValueError("Missing required parameters")
 
     is_email_in_users_access = db.is_email_in_users_access(email)
     is_email_in_added_api_users = db.is_email_in_added_api_users(email)
@@ -542,6 +507,15 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                 "unix_time": unix_time
             }
 
+            # Получаем информацию о пользователе для отправки вместе с картинкой
+            try:
+                tg_data = await bot.get_chat(user_id)
+                tg_username = tg_data.username if tg_data.username else "(без username)"
+                tg_name = tg_data.first_name if tg_data.first_name else "Пользователь"
+            except:
+                tg_username = "(неизвестно)"
+                tg_name = "Пользователь"
+            
             if image_base64:
                 # Декодируем base64 и отправляем фото
                 try:
@@ -554,16 +528,20 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                     
                     image_bytes = base64.b64decode(image_base64)
                     
-                    # Если есть текст, добавляем его к caption
-                    caption = f'🆕 Изображение от пользователя в Web версии (Техническая информация: {user_id})'
-                    if text:
-                        caption = f'{text}\n\n🆕 Изображение от пользователя в Web версии (Техническая информация: {user_id})'
+                    # Формируем caption с информацией о пользователе (как в текстовом сообщении)
+                    user_info = f'🆕 Изображение от пользователя {tg_name} @{tg_username} ({user_data[0]["email"].lower()} Поток: {users_flow}) в Web версии (Техническая информация: {user_id})'
                     
-                    # Отправляем фото трекеру
+                    # Если есть текст, добавляем его к caption
+                    caption = user_info
+                    if text:
+                        caption = f'{text}\n\n{user_info}'
+                    
+                    # Отправляем фото трекеру с кнопками
                     msg_photo = await bot.send_photo(
                         int(tracker_chat_id),
                         photo=BufferedInputFile(image_bytes, filename="image.jpg"),
-                        caption=caption
+                        caption=caption,
+                        reply_markup=keyboard.web_app_tracker_chat_keyboard(user_id)
                     )
                     
                     # Добавляем image в payload для web с правильным data URL
@@ -946,6 +924,15 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                 "unix_time": unix_time
             }
 
+            # Получаем информацию о пользователе для отправки вместе с картинкой
+            try:
+                tg_data = await bot.get_chat(user_id)
+                tg_username = tg_data.username if tg_data.username else "(без username)"
+                tg_name = tg_data.first_name if tg_data.first_name else "Пользователь"
+            except:
+                tg_username = "(неизвестно)"
+                tg_name = "Пользователь"
+            
             if image_base64:
                 # Декодируем base64 и отправляем фото
                 try:
@@ -958,16 +945,20 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                     
                     image_bytes = base64.b64decode(image_base64)
                     
-                    # Если есть текст, добавляем его к caption
-                    caption = f'🆕 Изображение от пользователя в Web версии (Техническая информация: {user_id})'
-                    if text:
-                        caption = f'{text}\n\n🆕 Изображение от пользователя в Web версии (Техническая информация: {user_id})'
+                    # Формируем caption с информацией о пользователе (как в текстовом сообщении)
+                    user_info = f'🆕 Изображение от пользователя {tg_name} @{tg_username} ({user_data[0]["email"].lower()} Поток: {users_flow}) в Web версии (Техническая информация: {user_id})'
                     
-                    # Отправляем фото в поддержку
+                    # Если есть текст, добавляем его к caption
+                    caption = user_info
+                    if text:
+                        caption = f'{text}\n\n{user_info}'
+                    
+                    # Отправляем фото в поддержку с кнопками
                     msg_photo = await bot.send_photo(
                         int(support_chat_id),
                         photo=BufferedInputFile(image_bytes, filename="image.jpg"),
-                        caption=caption
+                        caption=caption,
+                        reply_markup=keyboard.web_app_support_chat_keyboard(user_id)
                     )
                     
                     # Добавляем image в payload для web с правильным data URL
@@ -1303,6 +1294,15 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                 "unix_time": unix_time
             }
 
+            # Получаем информацию о пользователе для отправки вместе с картинкой
+            try:
+                tg_data = await bot.get_chat(user_id)
+                tg_username = tg_data.username if tg_data.username else "(без username)"
+                tg_name = tg_data.first_name if tg_data.first_name else "Пользователь"
+            except:
+                tg_username = "(неизвестно)"
+                tg_name = "Пользователь"
+            
             if image_base64:
                 # Декодируем base64 и отправляем фото в чат психолога
                 try:
@@ -1316,16 +1316,20 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                     
                     image_bytes = base64.b64decode(image_base64)
                     
-                    # Если есть текст, добавляем его к caption
-                    caption = f'🆕 Изображение от пользователя в Web версии (Техническая информация: {user_id})'
-                    if text:
-                        caption = f'{text}\n\n🆕 Изображение от пользователя в Web версии (Техническая информация: {user_id})'
+                    # Формируем caption с информацией о пользователе (как в текстовом сообщении)
+                    user_info = f'🆕 Изображение от пользователя {tg_name} @{tg_username} ({user_data[0]["email"].lower()} Поток: {users_flow}) в Web версии (Техническая информация: {user_id})'
                     
-                    # Отправляем фото в чат психолога
+                    # Если есть текст, добавляем его к caption
+                    caption = user_info
+                    if text:
+                        caption = f'{text}\n\n{user_info}'
+                    
+                    # Отправляем фото в чат психолога с кнопками
                     msg_photo = await bot.send_photo(
                         config.PSYHOLOGIST_CHAT_ID,
                         photo=BufferedInputFile(image_bytes, filename="image.jpg"),
-                        caption=caption
+                        caption=caption,
+                        reply_markup=keyboard.web_app_psychologist_chat_keyboard(user_id)
                     )
                     
                     # Добавляем image в payload для web с правильным data URL
