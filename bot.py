@@ -80,6 +80,7 @@ async def handle_alice_request(request: Request):
     email = request.query_params.get("email", "")
     flow = request.query_params.get("flow", "")
     user_id = request.query_params.get("user_id", "")
+    tarif = request.query_params.get("tarif", "")
     
     if not email or not flow or not user_id:
         raise ValueError("Missing required parameters")
@@ -97,7 +98,7 @@ async def handle_alice_request(request: Request):
         agc = await agcm.authorize()
         ss_2 = await agc.open_by_url(config.SPREADSHEET_URL_USERS)
         table = await ss_2.get_worksheet_by_id(0)
-        await table.append_row([email.lower().strip(), -1002572458943, flow, "", -1003545567896], value_input_option="USER_ENTERED")
+        await table.append_row([email.lower().strip(), -1002572458943, flow, tarif, -1003545567896], value_input_option="USER_ENTERED")
 
         try:
             await bot.send_message(config.LOG_CHAT_ID, f'Добавлен {email}, данные: {flow}, {user_id} (API GETCOURSE)')
