@@ -652,22 +652,10 @@ https://t.me/addlist/de2kQMGg21piOThi
 async def command_start_handler(call: CallbackQuery) -> None:
     user_data = db.get_user(call.from_user.id)
     users_flow = db.get_flow_by_email(user_data[0]['email'])
-    modules_access_data = db.get_module_access_3(users_flow, 0)
 
     modules_list = db.get_modules(users_flow)
-    modules_list_2 = []
 
-    if len(modules_access_data) == 0 or len(modules_list) == 0:
-        modules_list_2 = modules_list
-    else:
-        modules_list_2_sorted = sorted(modules_access_data, key=lambda k: k['num'])
-        for module in modules_list_2_sorted:
-            module_id_str = str(module.get('module_id'))
-            found_module = next((item for item in modules_list if item['id'] == module_id_str), None)
-            if found_module is not None:
-                modules_list_2.append(found_module)
-
-    await edit_message(call.message, 'Выбери модуль, чтобы выполнить задания:', reply_markup=keyboard.modules_keyboard(modules_list_2))
+    await edit_message(call.message, 'Выбери модуль, чтобы выполнить задания:', reply_markup=keyboard.modules_keyboard(modules_list))
   
 
 @start_router.callback_query(F.data.startswith('get_module:'))
