@@ -233,7 +233,7 @@ class MySQL:
         return self.cursor.fetchall()
     
     def get_modules(self, flow):
-        return sorted([i for i in config.SHEETS_DATA["modules"] if flow in i["flow"].split(",")], key=lambda x: int(x["id"]))
+        return [i for i in config.SHEETS_DATA["modules"] if flow in i["flow"].split(",")]
     
     def add_update_data(self, data):
         self.cursor.execute("INSERT INTO update_data (data) VALUES (%s)", (json.dumps(data),))
