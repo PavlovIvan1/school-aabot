@@ -233,7 +233,18 @@ class MySQL:
         return self.cursor.fetchall()
     
     def get_modules(self, flow):
-        return [i for i in config.SHEETS_DATA["modules"] if flow in i["flow"].split(",")]
+        modules = [i for i in config.SHEETS_DATA["modules"] if flow in i["flow"].split(",")]
+        
+        def custom_sort(m):
+            mod_id = int(m["id"])
+            if mod_id in [1, 9, 10, 11, 12]:
+                return (0, [1, 9, 10, 11, 12].index(mod_id))
+            elif mod_id > 12:
+                return (1, mod_id)
+            else:
+                return (2, mod_id)
+        
+        return sorted(modules, key=custom_sort)
     
     def add_update_data(self, data):
         self.cursor.execute("INSERT INTO update_data (data) VALUES (%s)", (json.dumps(data),))
