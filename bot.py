@@ -1728,7 +1728,7 @@ async def check_info():
                     if row[0] is None or row[1] is None or row[2] is None or len(row[0]) == 0 or len(row[1]) == 0 or not is_int(row[1]) or len(row[2]) == 0:
                         continue
                     
-if row[0].lower() not in config.USERS_ADDITIONAL_INFO or row[1] != config.USERS_ADDITIONAL_INFO[row[0].lower()].get("homework_chat_id", "") or row[4] != config.USERS_ADDITIONAL_INFO[row[0].lower()]["tracker_chat_id"] or row[5] != config.USERS_ADDITIONAL_INFO[row[0].lower()]["tariff"]: # TODO оптимизировать
+                    if row[0].lower() not in config.USERS_ADDITIONAL_INFO or row[1] != config.USERS_ADDITIONAL_INFO[row[0].lower()].get("homework_chat_id", "") or row[4] != config.USERS_ADDITIONAL_INFO[row[0].lower()]["tracker_chat_id"] or row[5] != config.USERS_ADDITIONAL_INFO[row[0].lower()]["tariff"]: # TODO оптимизировать
                         config.USERS_ADDITIONAL_INFO[row[0].lower()] = {"homework_chat_id": row[1], "tracker_chat_id": row[4], "tariff": row[5]}
                         print(f'Добавлено в ЛС трекеров: {row}')
                     
