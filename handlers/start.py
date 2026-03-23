@@ -34,6 +34,7 @@ async def add_user_to_spreadsheet(user_id: int, email: str, flow: str, bot):
     """Добавляет пользователя в Google Таблицу если его там нет"""
     import gspread_asyncio
     from google.oauth2.service_account import Credentials
+    import random
     
     try:
         # Проверяем, не добавлен ли уже пользователь
@@ -43,6 +44,14 @@ async def add_user_to_spreadsheet(user_id: int, email: str, flow: str, bot):
         
         db.add_email_to_added_api_users(email)
         db.add_to_link_access(str(user_id), email.lower().strip(), flow)
+        
+        # Выбираем случайный chat для коммуникации (поддержка)
+        support_chats = db.get_support_chats()
+        if support_chats:
+            random_support = random.choice(support_chats)
+            communication_chat_id = random_support['support_chat_id']
+        else:
+            communication_chat_id = ""
         
         # Добавляем в Google Таблицу
         creds = Credentials.from_service_account_file("credentials.json")
@@ -54,7 +63,7 @@ async def add_user_to_spreadsheet(user_id: int, email: str, flow: str, bot):
         agc = await agcm.authorize()
         ss_2 = await agc.open_by_url(config.SPREADSHEET_URL_USERS)
         table = await ss_2.get_worksheet_by_id(0)
-        await table.append_row([email.lower().strip(), -1002572458943, flow, "", -1003545567896], value_input_option="USER_ENTERED")
+        await table.append_row([email.lower().strip(), -1002572458943, flow, communication_chat_id, -1003545567896], value_input_option="USER_ENTERED")
     except Exception as e:
         # Логируем ошибку только в консоль
         print(f"Ошибка при добавлении в таблицу: {email} - {e}")

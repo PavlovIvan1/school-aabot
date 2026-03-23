@@ -93,12 +93,21 @@ async def handle_alice_request(request: Request):
     
     db.add_email_to_added_api_users(email)
     db.add_to_link_access(user_id, email.lower().strip(), flow)
-
+    
+    # Выбираем случайный chat для коммуникации (поддержка)
+    support_chats = db.get_support_chats()
+    if support_chats:
+        import random
+        random_support = random.choice(support_chats)
+        communication_chat_id = random_support['support_chat_id']
+    else:
+        communication_chat_id = ""
+    
     try:
         agc = await agcm.authorize()
         ss_2 = await agc.open_by_url(config.SPREADSHEET_URL_USERS)
         table = await ss_2.get_worksheet_by_id(0)
-        await table.append_row([email.lower().strip(), -1002572458943, flow, "", -1003545567896, tarif], value_input_option="USER_ENTERED")
+        await table.append_row([email.lower().strip(), -1002572458943, flow, communication_chat_id, -1003545567896, tarif], value_input_option="USER_ENTERED")
 
         try:
             await bot.send_message(config.LOG_CHAT_ID, f'Добавлен {email}, данные: {flow}, {user_id} (API GETCOURSE)')
@@ -174,7 +183,16 @@ async def getcourse_webhook(request: Request):
             # Определяем chat_id трекера (по умолчанию)
             tracker_chat_id = -1002572458943
             
-            await table.append_row([email.lower().strip(), tracker_chat_id, flow or "", "", -1003545567896], value_input_option="USER_ENTERED")
+            # Выбираем случайный chat для коммуникации (поддержка)
+            import random
+            support_chats = db.get_support_chats()
+            if support_chats:
+                random_support = random.choice(support_chats)
+                communication_chat_id = random_support['support_chat_id']
+            else:
+                communication_chat_id = ""
+            
+            await table.append_row([email.lower().strip(), tracker_chat_id, flow or "", communication_chat_id, -1003545567896], value_input_option="USER_ENTERED")
             
             try:
                 await bot.send_message(config.LOG_CHAT_ID, f'Добавлен из webhook {email}, поток: {flow} (GetCourse Webhook)')
@@ -1506,7 +1524,7 @@ async def check_info():
             if row[0] is None or row[1] is None or row[2] is None or len(row[0]) == 0 or len(row[1]) == 0 or not is_int(row[1]) or len(row[2]) == 0:
                 continue
             
-            config.USERS_ADDITIONAL_INFO[row[0].lower()] = {"tracker_chat_id": row[4], "tariff": row[5]}
+config.USERS_ADDITIONAL_INFO[row[0].lower()] = {"homework_chat_id": row[1], "tracker_chat_id": row[4], "tariff": row[5]}
     except Exception as e:
         print(f"Ошибка при обновлении: {e}")
         await asyncio.sleep(2)
@@ -1710,8 +1728,8 @@ async def check_info():
                     if row[0] is None or row[1] is None or row[2] is None or len(row[0]) == 0 or len(row[1]) == 0 or not is_int(row[1]) or len(row[2]) == 0:
                         continue
                     
-                    if row[0].lower() not in config.USERS_ADDITIONAL_INFO or row[4] != config.USERS_ADDITIONAL_INFO[row[0].lower()]["tracker_chat_id"] or row[5] != config.USERS_ADDITIONAL_INFO[row[0].lower()]["tariff"]: # TODO оптимизировать
-                        config.USERS_ADDITIONAL_INFO[row[0].lower()] = {"tracker_chat_id": row[4], "tariff": row[5]}
+if row[0].lower() not in config.USERS_ADDITIONAL_INFO or row[1] != config.USERS_ADDITIONAL_INFO[row[0].lower()].get("homework_chat_id", "") or row[4] != config.USERS_ADDITIONAL_INFO[row[0].lower()]["tracker_chat_id"] or row[5] != config.USERS_ADDITIONAL_INFO[row[0].lower()]["tariff"]: # TODO оптимизировать
+                        config.USERS_ADDITIONAL_INFO[row[0].lower()] = {"homework_chat_id": row[1], "tracker_chat_id": row[4], "tariff": row[5]}
                         print(f'Добавлено в ЛС трекеров: {row}')
                     
             except Exception as e:
