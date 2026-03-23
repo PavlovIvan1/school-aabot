@@ -1524,7 +1524,7 @@ async def check_info():
             if row[0] is None or row[1] is None or row[2] is None or len(row[0]) == 0 or len(row[1]) == 0 or not is_int(row[1]) or len(row[2]) == 0:
                 continue
             
-config.USERS_ADDITIONAL_INFO[row[0].lower()] = {"homework_chat_id": row[1], "tracker_chat_id": row[4], "tariff": row[5]}
+            config.USERS_ADDITIONAL_INFO[row[0].lower()] = {"homework_chat_id": row[1], "tracker_chat_id": row[4], "tariff": row[5]}
     except Exception as e:
         print(f"Ошибка при обновлении: {e}")
         await asyncio.sleep(2)
