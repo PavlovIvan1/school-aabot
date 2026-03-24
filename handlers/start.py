@@ -1202,10 +1202,7 @@ async def fixuser(message: types.Message):
         return
     
     if len(parts) != 2:
-        return await message.answer('Неправильная команда. Используйте:
-/fixuser - обновить свои данные
-/fixuser @username - обновить данные по username
-/fixuser email@example.com - обновить данные по email')
+        return await message.answer('Неправильная команда. Используйте:\n/fixuser - обновить свои данные\n/fixuser @username - обновить данные по username\n/fixuser email@example.com - обновить данные по email')
     
     user_param = parts[1]
     current_user_id = str(message.from_user.id)
@@ -1233,6 +1230,60 @@ async def fixuser(message: types.Message):
         db.update_user_username(current_user_id, current_username)
     
     await message.answer(f'Данные обновлены!\nEmail: {user_data[0]["email"]}\nTG ID: {current_user_id}\nUsername: @{current_username}')
+
+
+@start_router.message(F.text.startswith('/finduser'))
+async def finduser(message: types.Message):
+    """Команда для поиска пользователя по email или username и вывода информации"""
+    if message.from_user.id not in config.ADMINS_LIST:
+        return
+    
+    parts = message.text.split()
+    
+    if len(parts) != 2:
+        return await message.answer('Используйте: /finduser email@example.com или /finduser @username')
+    
+    user_param = parts[1]
+    user_data = None
+    
+    # Ищем по username или email
+    if user_param.startswith('@'):
+        user_data = db.get_user_by_username(user_param[1:])
+    elif '@' in user_param:
+        user_data = db.get_user_by_email(user_param.lower())
+    else:
+        return await message.answer('Используйте: /finduser email@example.com или /finduser @username')
+    
+    if user_data is None or len(user_data) == 0:
+        return await message.answer(f'Пользователь {user_param} не найден в базе данных.')
+    
+    user = user_data[0]
+    email = user.get('email', 'не указан')
+    tg_id = user.get('tg_id', 'не указан')
+    username = user.get('username', 'не указан')
+    
+    # Получаем информацию о потоке
+    try:
+        users_flow = db.get_flow_by_email(email)
+    except:
+        users_flow = 'не найден'
+    
+    # Проверяем, есть ли пользователь в USERS_ADDITIONAL_INFO
+    tracker_chat_id = config.USERS_ADDITIONAL_INFO.get(email, {}).get('tracker_chat_id', 'не назначен')
+    
+    info_text = f"""Информация о пользователе:
+
+Email: {email}
+TG ID: {tg_id}
+Username: @{username}
+Поток: {users_flow}
+Chat трекера: {tracker_chat_id}
+
+Команды для обновления:
+/fixtgid {email} - обновить TG ID текущего пользователя
+/fixuser {email} - обновить все данные (tg_id + username)"""
+    
+    await message.answer(info_text)
 
 
 @start_router.message_reaction()
