@@ -375,11 +375,27 @@ class MySQL:
 
     def update_user_username(self, tg_id, username):
         """Обновляет username пользователя по tg_id"""
+        # Проверяем, есть ли колонка username
+        try:
+            self.cursor.execute("SELECT username FROM users LIMIT 1")
+        except:
+            # Создаем колонку если её нет
+            self.cursor.execute("ALTER TABLE users ADD COLUMN username VARCHAR(255)")
+            self.database.commit()
+        
         self.cursor.execute("UPDATE users SET username = %s WHERE tg_id = %s", (username, tg_id))
         self.database.commit()
 
     def get_user_by_username(self, username):
         """Получает пользователя по username"""
+        # Проверяем, есть ли колонка username
+        try:
+            self.cursor.execute("SELECT username FROM users LIMIT 1")
+        except:
+            # Создаем колонку если её нет
+            self.cursor.execute("ALTER TABLE users ADD COLUMN username VARCHAR(255)")
+            self.database.commit()
+        
         self.cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
         return self.cursor.fetchall()
 
