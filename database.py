@@ -368,6 +368,21 @@ class MySQL:
         self.cursor.execute("UPDATE users SET support_chat_id = %s WHERE tg_id = %s", (support_chat_id, tg_id))
         self.database.commit()
 
+    def update_user_tg_id(self, email, tg_id):
+        """Обновляет tg_id пользователя по email"""
+        self.cursor.execute("UPDATE users SET tg_id = %s WHERE email = %s", (tg_id, email))
+        self.database.commit()
+
+    def update_user_username(self, tg_id, username):
+        """Обновляет username пользователя по tg_id"""
+        self.cursor.execute("UPDATE users SET username = %s WHERE tg_id = %s", (username, tg_id))
+        self.database.commit()
+
+    def get_user_by_username(self, username):
+        """Получает пользователя по username"""
+        self.cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
+        return self.cursor.fetchall()
+
     def add_to_support_messages(self, tg_id: int, chat_id: int, message_text: str, file_id: str, file_type: str, from_user: bool, unix_time: int, message_link: str):
         self.cursor.execute(
             """INSERT INTO support_messages (tg_id, chat_id, message_text, file_id, file_type, from_user, unix_time, message_link) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",

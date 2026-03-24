@@ -1176,6 +1176,65 @@ async def flapper(message: types.Message):
     await message.answer("Хлопушка успешно отправлена!")
 
 
+@start_router.message(F.text.startswith('/fixuser'))
+async def fixuser(message: types.Message):
+    """Команда для обновления данных пользователя (tg_id, username)"""
+    if message.from_user.id not in config.ADMINS_LIST:
+        return
+    
+    parts = message.text.split()
+    
+    if len(parts) == 1:
+        # /fixuser - обновить данные текущего пользователя
+        user_id = str(message.from_user.id)
+        username = message.from_user.username
+        
+        user_data = db.get_user(user_id)
+        if len(user_data) == 0:
+            return await message.answer('Вы не найдены в базе данных. Сначала авторизуйтесь в боте.')
+        
+        # Обновляем username
+        if username:
+            db.update_user_username(user_id, username)
+            await message.answer(f'Ваш username @{username} обновлен в базе данных!')
+        else:
+            await message.answer('У вас нет username в Telegram, обновить невозможно.')
+        return
+    
+    if len(parts) != 2:
+        return await message.answer('Неправильная команда. Используйте:
+/fixuser - обновить свои данные
+/fixuser @username - обновить данные по username
+/fixuser email@example.com - обновить данные по email')
+    
+    user_param = parts[1]
+    current_user_id = str(message.from_user.id)
+    current_username = message.from_user.username
+    
+    # Пытаемся найти пользователя по @username или email
+    if user_param.startswith('@'):
+        # Ищем по username в базе
+        user_data = db.get_user_by_username(user_param[1:])
+        if user_data is None or len(user_data) == 0:
+            return await message.answer(f'Пользователь с username {user_param} не найден в базе данных.')
+    elif '@' in user_param:
+        user_data = db.get_user_by_email(user_param.lower())
+        if len(user_data) == 0:
+            return await message.answer(f'Пользователь с email {user_param} не найден в базе данных.')
+    else:
+        return await message.answer('Неверный формат. Используйте @username или email.')
+    
+    # Обновляем tg_id и username
+    target_tg_id = user_data[0]['tg_id'] if 'tg_id' in user_data[0] else None
+    
+    # Обновляем данные
+    db.update_user_tg_id(user_data[0]['email'], current_user_id)
+    if current_username:
+        db.update_user_username(current_user_id, current_username)
+    
+    await message.answer(f'Данные обновлены!\nEmail: {user_data[0]["email"]}\nTG ID: {current_user_id}\nUsername: @{current_username}')
+
+
 @start_router.message_reaction()
 async def message_reaction_handler(message_reaction: types.MessageReactionUpdated) -> Any:
     support_chats_list = db.get_support_chats()
