@@ -218,6 +218,93 @@ body {
   align-items: center;
   justify-content: center;
 }
+
+/* ---------- DELETE POPUP ---------- */
+
+.delete-popup {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.delete-popup.active {
+  display: flex;
+}
+
+.delete-modal {
+  background: #17212b;
+  border-radius: 16px;
+  padding: 24px;
+  text-align: center;
+  max-width: 280px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.delete-modal h3 {
+  margin: 0 0 20px 0;
+  color: #fff;
+  font-size: 18px;
+}
+
+.delete-modal p {
+  color: #8fa3b7;
+  margin: 0 0 20px 0;
+  font-size: 14px;
+}
+
+.delete-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.delete-btn {
+  padding: 12px 24px;
+  border-radius: 8px;
+  border: none;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.delete-btn-cancel {
+  background: #1f2c38;
+  color: #fff;
+}
+
+.delete-btn-cancel:hover {
+  background: #2b3a4a;
+}
+
+.delete-btn-confirm {
+  background: #e94560;
+  color: #fff;
+}
+
+.delete-btn-confirm:hover {
+  background: #ff5a75;
+}
+
+.message.deleted {
+  opacity: 0.4;
+  text-decoration: line-through;
+}
+
+.message.deleted .time,
+.message.deleted img,
+.message.deleted video,
+.message.deleted .file-attach,
+.message.deleted audio {
+  display: none;
+}
 </style>
 </head>
 
@@ -249,6 +336,18 @@ body {
 <div class="preview-container" id="previewContainer" style="display: none;">
   <img id="previewImg" class="preview-image">
   <button class="preview-remove" onclick="removePreview()">✕</button>
+</div>
+
+<!-- Delete Popup -->
+<div class="delete-popup" id="deletePopup">
+  <div class="delete-modal">
+    <h3>Удалить сообщение?</h3>
+    <p>Сообщение будет удалено для всех участников чата</p>
+    <div class="delete-buttons">
+      <button class="delete-btn delete-btn-cancel" onclick="closeDeletePopup()">Отмена</button>
+      <button class="delete-btn delete-btn-confirm" onclick="confirmDelete()">Удалить</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -488,6 +587,112 @@ function connectWS() {
 }
 
 connectWS();
+
+/* ---------- MESSAGE DELETE (Long Press / Right Click) ---------- */
+
+let selectedMessageId = null;
+let selectedMessageElement = null;
+let longPressTimer = null;
+const LONG_PRESS_DURATION = 500; // ms
+
+// Add event listeners to all messages after page load
+function setupMessageDelete() {
+  const messages = document.querySelectorAll('.message');
+  
+  messages.forEach(msg => {
+    // Skip if already deleted
+    if (msg.classList.contains('deleted')) return;
+    
+    const messageId = msg.getAttribute('data-message-id');
+    if (!messageId) return;
+    
+    // Long press (mobile)
+    msg.addEventListener('touchstart', (e) => {
+      longPressTimer = setTimeout(() => {
+        showDeletePopup(messageId, msg);
+      }, LONG_PRESS_DURATION);
+    });
+    
+    msg.addEventListener('touchend', () => {
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+    });
+    
+    msg.addEventListener('touchmove', () => {
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+    });
+    
+    // Right click (desktop)
+    msg.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      showDeletePopup(messageId, msg);
+    });
+  });
+}
+
+function showDeletePopup(messageId, msgElement) {
+  selectedMessageId = messageId;
+  selectedMessageElement = msgElement;
+  document.getElementById('deletePopup').classList.add('active');
+}
+
+function closeDeletePopup() {
+  document.getElementById('deletePopup').classList.remove('active');
+  selectedMessageId = null;
+  selectedMessageElement = null;
+}
+
+async function confirmDelete() {
+  if (!selectedMessageId) return;
+  
+  try {
+    const response = await fetch('/delete_tracker_message', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message_id: selectedMessageId,
+        user_id: userId
+      })
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      // Mark message as deleted visually
+      if (selectedMessageElement) {
+        selectedMessageElement.classList.add('deleted');
+      }
+      closeDeletePopup();
+    } else {
+      alert('Ошибка удаления: ' + (data.error || 'Неизвестная ошибка'));
+    }
+  } catch (e) {
+    alert('Ошибка удаления сообщения');
+  }
+}
+
+// Setup delete functionality after page loads and after new messages
+window.addEventListener('load', () => {
+  setupMessageDelete();
+  
+  // Watch for new messages and setup delete on them
+  const observer = new MutationObserver(() => {
+    setupMessageDelete();
+  });
+  observer.observe(document.getElementById('chat'), { childList: true });
+});
+
+// Close popup when clicking outside
+document.getElementById('deletePopup').addEventListener('click', (e) => {
+  if (e.target.id === 'deletePopup') {
+    closeDeletePopup();
+  }
+});
 </script>
 
 </body>

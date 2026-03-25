@@ -239,7 +239,7 @@ async def handle_alice_request(request: Request):
         message_from_type = "incoming" if message["from_user"] else "outgoing"
         message_date = datetime.datetime.fromtimestamp(message["unix_time"]).strftime("%d.%m.%Y %H:%M")
 
-        html_messages += f'<div class="message {message_from_type}">{message["message_text"]}'
+        html_messages += f'<div class="message {message_from_type}" data-message-id="{message["message_id"]}">{message["message_text"]}'
         
         if message["file_type"] == "photo":
             file_info = await bot.get_file(message["file_id"])
@@ -285,7 +285,7 @@ async def handle_alice_request(request: Request):
         message_from_type = "outgoing" if message["from_user"] else "incoming"
         message_date = datetime.datetime.fromtimestamp(message["unix_time"]).strftime("%d.%m.%Y %H:%M")
 
-        html_messages += f'<div class="message {message_from_type}">{message["message_text"]}'
+        html_messages += f'<div class="message {message_from_type}" data-message-id="{message["message_id"]}">{message["message_text"]}'
         
         if message["file_type"] == "photo":
             file_info = await bot.get_file(message["file_id"])
@@ -357,7 +357,7 @@ async def handle_alice_request(request: Request):
             message_from_type = "incoming" if message["from_user"] else "outgoing"
             message_date = datetime.datetime.fromtimestamp(message["unix_time"]).strftime("%d.%m.%Y %H:%M")
 
-            html_messages += f'<div class="message {message_from_type}">{message["message_text"]}'
+            html_messages += f'<div class="message {message_from_type}" data-message-id="{message["message_id"]}">{message["message_text"]}'
             
             if message["file_type"] == "photo":
                 file_info = await bot.get_file(message["file_id"])
@@ -428,7 +428,7 @@ async def handle_alice_request(request: Request):
             message_from_type = "outgoing" if message["from_user"] else "incoming"
             message_date = datetime.datetime.fromtimestamp(message["unix_time"]).strftime("%d.%m.%Y %H:%M")
 
-            html_messages += f'<div class="message {message_from_type}">{message["message_text"]}'
+            html_messages += f'<div class="message {message_from_type}" data-message-id="{message["message_id"]}">{message["message_text"]}'
             
             if message["file_type"] == "photo":
                 file_info = await bot.get_file(message["file_id"])
@@ -776,7 +776,7 @@ async def handle_alice_request(request: Request):
             message_from_type = "incoming" if message["from_user"] else "outgoing"
             message_date = datetime.datetime.fromtimestamp(message["unix_time"]).strftime("%d.%m.%Y %H:%M")
 
-            html_messages += f'<div class="message {message_from_type}">{message["message_text"]}'
+            html_messages += f'<div class="message {message_from_type}" data-message-id="{message["message_id"]}">{message["message_text"]}'
             
             if message["file_type"] == "photo":
                 file_info = await bot.get_file(message["file_id"])
@@ -1137,7 +1137,7 @@ async def handle_alice_request(request: Request):
             message_from_type = "incoming" if message["from_user"] else "outgoing"
             message_date = datetime.datetime.fromtimestamp(message["unix_time"]).strftime("%d.%m.%Y %H:%M")
 
-            html_messages += f'<div class="message {message_from_type}">{message["message_text"]}'
+            html_messages += f'<div class="message {message_from_type}" data-message-id="{message["message_id"]}">{message["message_text"]}'
             
             if message["file_type"] == "photo":
                 file_info = await bot.get_file(message["file_id"])
@@ -1197,6 +1197,52 @@ async def test_endpoint():
     return {"status": "ok"}
 
 
+# ============ MESSAGE DELETION API ============
+@app.post("/delete_tracker_message")
+async def delete_tracker_message(request: Request):
+    try:
+        data = await request.json()
+        message_id = data.get("message_id")
+        user_id = data.get("user_id")
+        if not message_id or not user_id:
+            return JSONResponse(content={"success": False, "error": "Missing message_id or user_id"}, status_code=400)
+        
+        db.delete_tracker_message(int(message_id), int(user_id))
+        return {"success": True}
+    except Exception as e:
+        return JSONResponse(content={"success": False, "error": str(e)}, status_code=500)
+
+
+@app.post("/delete_psychologist_message")
+async def delete_psychologist_message(request: Request):
+    try:
+        data = await request.json()
+        message_id = data.get("message_id")
+        user_id = data.get("user_id")
+        if not message_id or not user_id:
+            return JSONResponse(content={"success": False, "error": "Missing message_id or user_id"}, status_code=400)
+        
+        db.delete_psychologist_message(int(message_id), int(user_id))
+        return {"success": True}
+    except Exception as e:
+        return JSONResponse(content={"success": False, "error": str(e)}, status_code=500)
+
+
+@app.post("/delete_support_message")
+async def delete_support_message(request: Request):
+    try:
+        data = await request.json()
+        message_id = data.get("message_id")
+        user_id = data.get("user_id")
+        if not message_id or not user_id:
+            return JSONResponse(content={"success": False, "error": "Missing message_id or user_id"}, status_code=400)
+        
+        db.delete_support_message(int(message_id), int(user_id))
+        return {"success": True}
+    except Exception as e:
+        return JSONResponse(content={"success": False, "error": str(e)}, status_code=500)
+
+
 @app.get("/get_user_psychologist_chat")
 async def handle_alice_request(request: Request):
     try:
@@ -1218,7 +1264,7 @@ async def handle_alice_request(request: Request):
             message_from_type = "outgoing" if message["from_user"] else "incoming"
             message_date = datetime.datetime.fromtimestamp(message["unix_time"]).strftime("%d.%m.%Y %H:%M")
 
-            html_messages += f'<div class="message {message_from_type}">{message["message_text"]}'
+            html_messages += f'<div class="message {message_from_type}" data-message-id="{message["message_id"]}">{message["message_text"]}'
             
             if message["file_type"] == "photo":
                 file_info = await bot.get_file(message["file_id"])

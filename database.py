@@ -19,7 +19,8 @@ class MySQL:
             file_type TEXT,
             from_user BOOLEAN,
             unix_time INTEGER,
-            message_link TEXT
+            message_link TEXT,
+            is_deleted BOOLEAN DEFAULT FALSE
         )""")
 
         self.cursor.execute("""CREATE TABLE IF NOT EXISTS psychologist_messages (
@@ -31,7 +32,21 @@ class MySQL:
             file_type TEXT,
             from_user BOOLEAN,
             unix_time INTEGER,
-            message_link TEXT
+            message_link TEXT,
+            is_deleted BOOLEAN DEFAULT FALSE
+        )""")
+
+        self.cursor.execute("""CREATE TABLE IF NOT EXISTS support_messages (
+            message_id INTEGER AUTO_INCREMENT PRIMARY KEY,
+            tg_id BIGINT,
+            chat_id BIGINT,
+            message_text TEXT,
+            file_id TEXT,
+            file_type TEXT,
+            from_user BOOLEAN,
+            unix_time INTEGER,
+            message_link TEXT,
+            is_deleted BOOLEAN DEFAULT FALSE
         )""")
 
         self.database.commit()
@@ -406,8 +421,12 @@ class MySQL:
         self.database.commit()
 
     def get_support_messages_by_tg_id(self, tg_id: int):
-        self.cursor.execute("SELECT * FROM support_messages WHERE tg_id = %s ORDER BY message_id ASC", (tg_id,))
+        self.cursor.execute("SELECT * FROM support_messages WHERE tg_id = %s AND (is_deleted IS NULL OR is_deleted = FALSE) ORDER BY message_id ASC", (tg_id,))
         return self.cursor.fetchall()
+    
+    def delete_support_message(self, message_id: int):
+        self.cursor.execute("UPDATE support_messages SET is_deleted = TRUE WHERE message_id = %s", (message_id,))
+        self.database.commit()
     
     def add_to_trackers_messages(self, tg_id: int, chat_id: int, message_text: str, file_id: str, file_type: str, from_user: bool, unix_time: int, message_link: str):
         self.cursor.execute(
@@ -416,12 +435,20 @@ class MySQL:
         self.database.commit()
 
     def get_trackers_messages_by_tg_id(self, tg_id: int):
-        self.cursor.execute("SELECT * FROM trackers_messages WHERE tg_id = %s ORDER BY message_id ASC", (tg_id,))
+        self.cursor.execute("SELECT * FROM trackers_messages WHERE tg_id = %s AND (is_deleted IS NULL OR is_deleted = FALSE) ORDER BY message_id ASC", (tg_id,))
         return self.cursor.fetchall()
     
+    def delete_tracker_message(self, message_id: int):
+        self.cursor.execute("UPDATE trackers_messages SET is_deleted = TRUE WHERE message_id = %s", (message_id,))
+        self.database.commit()
+    
     def get_psychologist_messages_by_tg_id(self, tg_id: int):
-        self.cursor.execute("SELECT * FROM psychologist_messages WHERE tg_id = %s ORDER BY message_id ASC", (tg_id,))
+        self.cursor.execute("SELECT * FROM psychologist_messages WHERE tg_id = %s AND (is_deleted IS NULL OR is_deleted = FALSE) ORDER BY message_id ASC", (tg_id,))
         return self.cursor.fetchall()
+    
+    def delete_psychologist_message(self, message_id: int):
+        self.cursor.execute("UPDATE psychologist_messages SET is_deleted = TRUE WHERE message_id = %s", (message_id,))
+        self.database.commit()
     
     def add_to_psychologist_messages(self, tg_id: int, chat_id: int, message_text: str, file_id: str, file_type: str, from_user: bool, unix_time: int, message_link: str):
         self.cursor.execute(
