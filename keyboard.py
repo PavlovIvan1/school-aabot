@@ -1,7 +1,7 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
-def main_keyboard() -> ReplyKeyboardMarkup:
+def main_keyboard(include_dashboards=False) -> ReplyKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     
     builder.row(InlineKeyboardButton(text="📚 Задания к урокам", callback_data="study_menu"))
@@ -9,6 +9,10 @@ def main_keyboard() -> ReplyKeyboardMarkup:
     builder.row(InlineKeyboardButton(text="📝 Помощь психолога", callback_data="get_psychologist"))
     builder.row(InlineKeyboardButton(text="💬 Обратиться в поддержку", callback_data="get_support:menu"))
     builder.row(InlineKeyboardButton(text="ℹ️ Инструкция", callback_data="get_instruction"))
+
+    if include_dashboards:
+        builder.row(InlineKeyboardButton(text="📊 Дашборд менторов", web_app=WebAppInfo(url="https://rb.infinitydev.tw1.su/mentor_dashboard")))
+        builder.row(InlineKeyboardButton(text="👤 Дашборд личных чатов", web_app=WebAppInfo(url="https://rb.infinitydev.tw1.su/tracker_personal_dashboard")))
     #builder.row(InlineKeyboardButton(text="ℹ️ Онбординг", callback_data="get_onboarding"))
 
     return builder.as_markup()

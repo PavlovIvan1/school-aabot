@@ -238,12 +238,7 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
     is_support_chat = message.chat.id in support_chat_ids
     is_tracker_user = str(message.from_user.id) in [str(i) for i in config.MANUAL_TRACKER_USER_IDS]
 
-    if is_tracker_chat or is_support_chat or is_tracker_user:
-        await message.answer(
-            "Панель для команды\nОткройте дашборд активности и вовлечённости менторов:",
-            reply_markup=keyboard.staff_dashboard_keyboard()
-        )
-        return
+    is_staff = is_tracker_chat or is_support_chat or is_tracker_user
 
     user_data = db.get_user(message.from_user.id)
 
@@ -298,7 +293,7 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
 
 Здесь твои домашние задания, связь с личным трекером и поддержкой. Всё в одном месте — удобно и без лишних поисков
 
-Выбирай нужный раздел ниже и нажимай на кнопку👇""", reply_markup=keyboard.main_keyboard())
+Выбирай нужный раздел ниже и нажимай на кнопку👇""", reply_markup=keyboard.main_keyboard(include_dashboards=is_staff))
 
 
 @start_router.callback_query(F.data == 'main')
@@ -310,17 +305,7 @@ async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
     is_support_chat = call.message.chat.id in support_chat_ids
     is_tracker_user = str(call.from_user.id) in [str(i) for i in config.MANUAL_TRACKER_USER_IDS]
 
-    if is_tracker_chat or is_support_chat or is_tracker_user:
-        try:
-            await call.message.delete()
-        except:
-            pass
-
-        await call.message.answer(
-            "Панель для команды\nОткройте дашборд активности и вовлечённости менторов:",
-            reply_markup=keyboard.staff_dashboard_keyboard()
-        )
-        return
+    is_staff = is_tracker_chat or is_support_chat or is_tracker_user
 
     try:
         await call.message.delete()
@@ -331,7 +316,7 @@ async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
 
 Здесь твои домашние задания, связь с личным трекером и поддержкой. Всё в одном месте — удобно и без лишних поисков
 
-Выбирай нужный раздел ниже и нажимай на кнопку👇""", reply_markup=keyboard.main_keyboard())
+Выбирай нужный раздел ниже и нажимай на кнопку👇""", reply_markup=keyboard.main_keyboard(include_dashboards=is_staff))
 
 
 @start_router.callback_query(F.data == 'study_menu')
