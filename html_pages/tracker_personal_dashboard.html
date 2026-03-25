@@ -7,7 +7,7 @@
   <style>
     :root { --bg:#1a1a1a; --bg2:#222; --card:#262626; --line:#343434; --text:#e8e8e8; --muted:#a6a6a6; --g:#58c37f; --y:#d7b15a; --r:#d86e6e; }
     *{box-sizing:border-box;font-family:Arial,sans-serif}
-    body{margin:0;background:var(--bg);color:var(--text)}
+    body{margin:0;background:var(--bg);color:var(--text);overflow-x:hidden}
     .wrap{max-width:1400px;margin:0 auto;padding:14px}
     .panel{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px}
     h1{margin:0;font-size:18px}.sub{margin-top:6px;color:var(--muted);font-size:12px}
@@ -19,9 +19,10 @@
     .kpi .t{font-size:12px;color:var(--muted)} .kpi .v{font-size:20px;margin-top:8px}
     .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}.g{background:var(--g)}.y{background:var(--y)}.r{background:var(--r)}
     table{width:100%;border-collapse:collapse;font-size:13px} th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left} th{font-size:12px;color:var(--muted)}
+    td{overflow-wrap:anywhere;word-break:break-word}
     tr.row:hover{background:#2d2d2d;cursor:pointer}
     .grid{display:grid;grid-template-columns:2fr 1fr;gap:10px}
-    .chip{background:#2b2b2b;border:1px solid var(--line);border-radius:8px;padding:7px 8px;margin-bottom:6px;font-size:12px}
+    .chip{background:#2b2b2b;border:1px solid var(--line);border-radius:8px;padding:7px 8px;margin-bottom:6px;font-size:12px;overflow-wrap:anywhere;word-break:break-word}
     .action{color:#d5d5d5;text-decoration:none;border:1px solid var(--line);border-radius:6px;padding:2px 6px}.action:hover{background:#313131}
     @media(max-width:1100px){.filters{grid-template-columns:repeat(2,minmax(120px,1fr))}.kpis{grid-template-columns:repeat(2,minmax(160px,1fr))}.grid{grid-template-columns:1fr}}
     @media(max-width:768px){
@@ -57,6 +58,11 @@
       <thead><tr><th>Трекер</th><th>Ученик</th><th>Поток</th><th>Группа</th><th>Неделя</th><th>Ср. ответ</th><th>Макс. пауза</th><th>Инициативность</th><th>Статус</th></tr></thead>
       <tbody id="rows"></tbody>
     </table>
+    <div id="pagination" style="display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:10px;">
+      <button id="prevPage">Назад</button>
+      <span id="pageInfo" class="sub">Страница 1</span>
+      <button id="nextPage">Вперёд</button>
+    </div>
   </div>
 
   <div class="grid">
@@ -117,9 +123,24 @@
     ];
     $('kpis').innerHTML=cards.map(c=>`<div class="kpi"><div class="t">${c[0]}</div><div class="v"><span class="dot ${c[2]}"></span>${c[1]}</div><div class="sub">${c[3]}</div></div>`).join('');
   }
+  let currentPage = 1;
+  const pageSize = 12;
+  let currentFiltered = [];
+
   function renderTable(ds){
-    $('rows').innerHTML=ds.map((r,i)=>`<tr class="row" data-i="${i}"><td data-label="Трекер">${r.tracker}</td><td data-label="Ученик">${r.student}</td><td data-label="Поток">${r.stream}</td><td data-label="Группа">${r.tariff}</td><td data-label="Неделя">${r.week}</td><td data-label="Ср. ответ">${r.avg.toFixed(1)} ч (${em(stAvg(r.avg))})</td><td data-label="Макс. пауза">${Math.round(r.pause)} мин (${em(stPause(r.pause))})</td><td data-label="Инициативность">${Math.round(r.init)}% (${em(stInit(r.init))})</td><td data-label="Статус">${em(overall(r))}</td></tr>`).join('');
-    [...document.querySelectorAll('tr.row')].forEach((el,i)=>el.onclick=()=>renderDetail(ds[i]));
+    currentFiltered = ds;
+    const totalPages = Math.max(1, Math.ceil(ds.length / pageSize));
+    if (currentPage > totalPages) currentPage = totalPages;
+
+    const start = (currentPage - 1) * pageSize;
+    const pageRows = ds.slice(start, start + pageSize);
+
+    $('rows').innerHTML=pageRows.map((r,i)=>`<tr class="row" data-i="${i}"><td data-label="Трекер">${r.tracker}</td><td data-label="Ученик">${r.student}</td><td data-label="Поток">${r.stream}</td><td data-label="Группа">${r.tariff}</td><td data-label="Неделя">${r.week}</td><td data-label="Ср. ответ">${r.avg.toFixed(1)} ч (${em(stAvg(r.avg))})</td><td data-label="Макс. пауза">${Math.round(r.pause)} мин (${em(stPause(r.pause))})</td><td data-label="Инициативность">${Math.round(r.init)}% (${em(stInit(r.init))})</td><td data-label="Статус">${em(overall(r))}</td></tr>`).join('');
+    [...document.querySelectorAll('tr.row')].forEach((el,i)=>el.onclick=()=>renderDetail(pageRows[i]));
+
+    $('pageInfo').textContent = `Страница ${currentPage} из ${totalPages}`;
+    $('prevPage').disabled = currentPage <= 1;
+    $('nextPage').disabled = currentPage >= totalPages;
   }
   function renderDetail(r){
     $('detail').innerHTML=`<div class="chip"><b>Трекер:</b> ${r.tracker}</div><div class="chip"><b>Ученик:</b> ${r.student}</div><div class="chip"><b>Поток:</b> ${r.stream}</div><div class="chip"><b>Тариф:</b> ${r.tariff}</div><div class="chip"><b>Неделя:</b> ${r.week}</div><div class="chip"><a class="action" target="_blank" href="${r.link}">Открыть чат</a></div><div class="chip">Графики динамики за 8 недель — место для интеграции данных</div>`;
@@ -133,8 +154,13 @@
     const fastest=[...ds].sort((a,b)=>a.avg-b.avg)[0], initiative=[...ds].sort((a,b)=>b.init-a.init)[0];
     $('stars').innerHTML=`<div class="chip">Лучший по скорости ответа: <b>${fastest.tracker}</b> / ${fastest.student} (${fastest.avg.toFixed(1)} ч) <a class="action" href="${fastest.link}" target="_blank">Ссылка</a></div><div class="chip">Лучший по инициативности: <b>${initiative.tracker}</b> / ${initiative.student} (${Math.round(initiative.init)}%) <a class="action" href="${initiative.link}" target="_blank">Ссылка</a></div>`;
   }
-  function refresh(){ const ds=filtered(); renderKpis(ds); renderTable(ds); renderProblems(ds); renderStars(ds); $('detail').innerHTML='<span class="sub">Нажмите на строку чата</span>'; }
-  initFilters(); $('apply').addEventListener('click', refresh); refresh();
+  function refresh(){ const ds=filtered(); currentPage = 1; renderKpis(ds); renderTable(ds); renderProblems(ds); renderStars(ds); $('detail').innerHTML='<span class="sub">Нажмите на строку чата</span>'; }
+
+  initFilters();
+  $('apply').addEventListener('click', refresh);
+  $('prevPage').addEventListener('click', () => { if (currentPage > 1) { currentPage -= 1; renderTable(currentFiltered); } });
+  $('nextPage').addEventListener('click', () => { const totalPages = Math.max(1, Math.ceil(currentFiltered.length / pageSize)); if (currentPage < totalPages) { currentPage += 1; renderTable(currentFiltered); } });
+  refresh();
 </script>
 </body>
 </html>
