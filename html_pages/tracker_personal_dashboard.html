@@ -73,6 +73,11 @@
   <div class="panel">
     <h3 style="margin:0 0 8px 0;font-size:14px;">Проблемные зоны</h3>
     <table><thead><tr><th>Проблема</th><th>Трекер</th><th>Ученик</th><th>Поток</th><th>Знач.</th><th>Норма</th></tr></thead><tbody id="problems"></tbody></table>
+    <div id="problemsPagination" style="display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:10px;">
+      <button id="prevProblemsPage">Назад</button>
+      <span id="problemsPageInfo" class="sub">Страница 1</span>
+      <button id="nextProblemsPage">Вперёд</button>
+    </div>
   </div>
 </div>
 
@@ -145,9 +150,28 @@
   function renderDetail(r){
     $('detail').innerHTML=`<div class="chip"><b>Трекер:</b> ${r.tracker}</div><div class="chip"><b>Ученик:</b> ${r.student}</div><div class="chip"><b>Поток:</b> ${r.stream}</div><div class="chip"><b>Тариф:</b> ${r.tariff}</div><div class="chip"><b>Неделя:</b> ${r.week}</div><div class="chip"><a class="action" target="_blank" href="${r.link}">Открыть чат</a></div><div class="chip">Графики динамики за 8 недель — место для интеграции данных</div>`;
   }
+  let problemsItems=[];
+  let problemsPage=1;
+  const problemsPageSize=10;
+
+  function renderProblemsPage(){
+    const totalPages=Math.max(1, Math.ceil(problemsItems.length / problemsPageSize));
+    if(problemsPage>totalPages) problemsPage=totalPages;
+    const start=(problemsPage-1)*problemsPageSize;
+    const pageItems=problemsItems.slice(start, start+problemsPageSize);
+
+    $('problems').innerHTML=pageItems.map(i=>`<tr><td data-label="Проблема">${i[0]}</td><td data-label="Трекер">${i[1].tracker}</td><td data-label="Ученик">${i[1].student}</td><td data-label="Поток">${i[1].stream}</td><td data-label="Значение">${i[2]}</td><td data-label="Норма">${i[3]}</td></tr>`).join('')||'<tr><td data-label="Статус" colspan="6" class="sub">Красных сигналов нет</td></tr>';
+
+    $('problemsPageInfo').textContent=`Страница ${problemsPage} из ${totalPages}`;
+    $('prevProblemsPage').disabled = problemsPage <= 1;
+    $('nextProblemsPage').disabled = problemsPage >= totalPages;
+  }
+
   function renderProblems(ds){
     const p=[]; ds.forEach(r=>{ if(stAvg(r.avg)==='r') p.push(['Время ответа выше порога',r,`${r.avg.toFixed(1)} ч`,'<3 ч']); if(stPause(r.pause)==='r') p.push(['Макс. пауза выше порога',r,`${Math.round(r.pause)}`,'<360']); if(stInit(r.init)==='r') p.push(['Низкая инициативность',r,`${Math.round(r.init)}%`,'>30%']); });
-    $('problems').innerHTML=p.map(i=>`<tr><td data-label="Проблема">${i[0]}</td><td data-label="Трекер">${i[1].tracker}</td><td data-label="Ученик">${i[1].student}</td><td data-label="Поток">${i[1].stream}</td><td data-label="Значение">${i[2]}</td><td data-label="Норма">${i[3]}</td></tr>`).join('')||'<tr><td data-label="Статус" colspan="6" class="sub">Красных сигналов нет</td></tr>';
+    problemsItems = p;
+    problemsPage = 1;
+    renderProblemsPage();
   }
   function renderStars(ds){
     if(!ds.length){$('stars').innerHTML='<div class="sub">Нет данных</div>';return;}
@@ -160,6 +184,8 @@
   $('apply').addEventListener('click', refresh);
   $('prevPage').addEventListener('click', () => { if (currentPage > 1) { currentPage -= 1; renderTable(currentFiltered); } });
   $('nextPage').addEventListener('click', () => { const totalPages = Math.max(1, Math.ceil(currentFiltered.length / pageSize)); if (currentPage < totalPages) { currentPage += 1; renderTable(currentFiltered); } });
+  $('prevProblemsPage').addEventListener('click', () => { if (problemsPage > 1) { problemsPage -= 1; renderProblemsPage(); } });
+  $('nextProblemsPage').addEventListener('click', () => { const totalPages = Math.max(1, Math.ceil(problemsItems.length / problemsPageSize)); if (problemsPage < totalPages) { problemsPage += 1; renderProblemsPage(); } });
   refresh();
 </script>
 </body>

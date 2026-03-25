@@ -134,6 +134,11 @@
         <thead><tr><th>Проблема</th><th>Группа</th><th>Ментор</th><th>Поток</th><th>Значение</th><th>Норма</th><th>Действие</th></tr></thead>
         <tbody id="problems"></tbody>
       </table>
+      <div id="problemsPagination" style="display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:10px;">
+        <button id="prevProblemsPage">Назад</button>
+        <span id="problemsPageInfo" class="sub">Страница 1</span>
+        <button id="nextProblemsPage">Вперёд</button>
+      </div>
     </div>
   </div>
 
@@ -249,6 +254,24 @@
       `;
     }
 
+    let problemsItems = [];
+    let problemsPage = 1;
+    const problemsPageSize = 10;
+
+    function renderProblemsPage(){
+      const totalPages = Math.max(1, Math.ceil(problemsItems.length / problemsPageSize));
+      if (problemsPage > totalPages) problemsPage = totalPages;
+
+      const start = (problemsPage - 1) * problemsPageSize;
+      const pageItems = problemsItems.slice(start, start + problemsPageSize);
+
+      $('problems').innerHTML = pageItems.map(i=>`<tr><td data-label="Проблема">${i.p}</td><td data-label="Группа">${i.r.chat}</td><td data-label="Ментор">${i.r.mentor}</td><td data-label="Поток">${i.r.stream}</td><td data-label="Значение">${i.v}</td><td data-label="Норма">${i.n}</td><td data-label="Действие"><a class="action" href="${i.r.link}" target="_blank">${i.a}</a></td></tr>`).join('') || '<tr><td data-label="Статус" colspan="7" class="sub">Проблемных зон за выбранный период не найдено</td></tr>';
+
+      $('problemsPageInfo').textContent = `Страница ${problemsPage} из ${totalPages}`;
+      $('prevProblemsPage').disabled = problemsPage <= 1;
+      $('nextProblemsPage').disabled = problemsPage >= totalPages;
+    }
+
     function renderProblems(rows){
       const items = [];
       rows.forEach(r=>{
@@ -257,7 +280,9 @@
         if(statusInit(r.init)==='r') items.push({p:'Низкая инициативность', r, v:`${Math.round(r.init)}%`, n:'> 30%', a:'Написать'});
         if(statusStudent(r.student)==='y' || statusStudent(r.student)==='r') items.push({p:'Низкая активность учеников', r, v:`${r.student.toFixed(1)}`, n:'> 1.0', a:'Посмотреть'});
       });
-      $('problems').innerHTML = items.map(i=>`<tr><td data-label="Проблема">${i.p}</td><td data-label="Группа">${i.r.chat}</td><td data-label="Ментор">${i.r.mentor}</td><td data-label="Поток">${i.r.stream}</td><td data-label="Значение">${i.v}</td><td data-label="Норма">${i.n}</td><td data-label="Действие"><a class="action" href="${i.r.link}" target="_blank">${i.a}</a></td></tr>`).join('') || '<tr><td data-label="Статус" colspan="7" class="sub">Проблемных зон за выбранный период не найдено</td></tr>';
+      problemsItems = items;
+      problemsPage = 1;
+      renderProblemsPage();
     }
 
     function renderStars(rows){
@@ -285,6 +310,8 @@
     $('stream').addEventListener('change', rebuildGroup);
     $('mentor').addEventListener('change', rebuildGroup);
     $('apply').addEventListener('click', refresh);
+    $('prevProblemsPage').addEventListener('click', () => { if (problemsPage > 1) { problemsPage -= 1; renderProblemsPage(); } });
+    $('nextProblemsPage').addEventListener('click', () => { const totalPages = Math.max(1, Math.ceil(problemsItems.length / problemsPageSize)); if (problemsPage < totalPages) { problemsPage += 1; renderProblemsPage(); } });
     refresh();
   </script>
 </body>
