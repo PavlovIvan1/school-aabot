@@ -171,6 +171,8 @@ async def check_user_support(user_data):
 
 @support_router.callback_query(F.data.startswith('get_support'))
 async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
+    await call.answer()
+
     # Текущее время в Москве (UTC+3)
     now_utc = datetime.datetime.utcnow()
     moscow_time = now_utc + datetime.timedelta(hours=3)
@@ -358,6 +360,8 @@ async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
 @support_router.callback_query(F.data.startswith('call_time'))
 async def call_time_handler(call: CallbackQuery, state: FSMContext) -> None:
     """Обработчик выбора времени звонка"""
+    await call.answer()
+
     time_option = call.data.split(':')[1]
     
     # Получаем выбранную дату из state
@@ -432,6 +436,32 @@ async def call_time_handler(call: CallbackQuery, state: FSMContext) -> None:
                 )
             except Exception as e:
                 print(f"Error sending to support chat: {e}")
+
+
+@support_router.callback_query(F.data.startswith('call_date'))
+async def call_date_handler(call: CallbackQuery, state: FSMContext) -> None:
+    """Обработчик выбора даты звонка"""
+    await call.answer()
+
+    selected_date = call.data.split(':')[1]
+    await state.update_data(selected_date=selected_date)
+
+    try:
+        if call.message.text:
+            await call.message.edit_text(
+                f'Выберите время для звонка (выбрана дата {selected_date}):',
+                reply_markup=keyboard.call_time_keyboard()
+            )
+        else:
+            await call.message.answer(
+                f'Выберите время для звонка (выбрана дата {selected_date}):',
+                reply_markup=keyboard.call_time_keyboard()
+            )
+    except:
+        await call.message.answer(
+            f'Выберите время для звонка (выбрана дата {selected_date}):',
+            reply_markup=keyboard.call_time_keyboard()
+        )
 
 
 @support_router.message(StateFilter(SupportChat.message))
