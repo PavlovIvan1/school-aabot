@@ -7,7 +7,7 @@ def main_keyboard() -> ReplyKeyboardMarkup:
     builder.row(InlineKeyboardButton(text="📚 Задания к урокам", callback_data="study_menu"))
     builder.row(InlineKeyboardButton(text="✉️ Написать личному трекеру", callback_data="write_tracker"))
     builder.row(InlineKeyboardButton(text="📝 Помощь психолога", callback_data="get_psychologist"))
-    builder.row(InlineKeyboardButton(text="💬 Написать в поддержку", callback_data="get_support"))
+    builder.row(InlineKeyboardButton(text="💬 Обратиться в поддержку", callback_data="get_support:menu"))
     builder.row(InlineKeyboardButton(text="ℹ️ Инструкция", callback_data="get_instruction"))
     #builder.row(InlineKeyboardButton(text="ℹ️ Онбординг", callback_data="get_onboarding"))
 
@@ -141,6 +141,68 @@ def support_keyboard_2() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
 
     builder.row(InlineKeyboardButton(text="Открыть чат с поддержкой", callback_data="get_support:1"))
+
+    return builder.as_markup()
+
+
+def support_options_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура с опциями обращения в поддержку"""
+    builder = InlineKeyboardBuilder()
+    
+    builder.row(InlineKeyboardButton(text="📝 Написать в поддержку", callback_data="get_support:chat"))
+    builder.row(InlineKeyboardButton(text="📞 Заказать звонок", callback_data="get_support:call"))
+    builder.row(InlineKeyboardButton(text="🔙 Назад", callback_data="main"))
+
+    return builder.as_markup()
+
+
+def call_time_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура выбора времени звонка"""
+    builder = InlineKeyboardBuilder()
+    
+    builder.row(InlineKeyboardButton(text="11:00", callback_data="call_time:11"))
+    builder.row(InlineKeyboardButton(text="13:00", callback_data="call_time:13"))
+    builder.row(InlineKeyboardButton(text="16:00", callback_data="call_time:16"))
+    builder.row(InlineKeyboardButton(text="Как можно скорее", callback_data="call_time:asap"))
+    builder.row(InlineKeyboardButton(text="🔙 Назад", callback_data="get_support:menu"))
+
+    return builder.as_markup()
+
+
+def call_date_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура выбора даты звонка (на 10 дней вперёд)"""
+    import datetime
+    
+    builder = InlineKeyboardBuilder()
+    
+    # Текущая дата в Москве
+    now_utc = datetime.datetime.utcnow()
+    moscow_time = now_utc + datetime.timedelta(hours=3)
+    
+    # Генерируем даты на 10 дней вперёд
+    dates = []
+    for i in range(10):
+        next_date = moscow_time + datetime.timedelta(days=i)
+        dates.append(next_date)
+    
+    # Создаём кнопки по 5 в ряд
+    row = []
+    for date in dates:
+        day = date.day
+        month_names = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
+        month = month_names[date.month - 1]
+        btn_text = f"{day} {month}"
+        row.append(InlineKeyboardButton(text=btn_text, callback_data=f"call_date:{date.strftime('%Y-%m-%d')}"))
+        
+        if len(row) == 5:
+            builder.row(*row)
+            row = []
+    
+    # Добавляем оставшиеся кнопки
+    if row:
+        builder.row(*row)
+    
+    builder.row(InlineKeyboardButton(text="🔙 Назад", callback_data="get_support:menu"))
 
     return builder.as_markup()
 

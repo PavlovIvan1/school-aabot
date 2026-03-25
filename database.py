@@ -440,7 +440,7 @@ class MySQL:
         self.cursor.execute("SELECT * FROM support_messages WHERE tg_id = %s AND (is_deleted IS NULL OR is_deleted = FALSE) ORDER BY message_id ASC", (tg_id,))
         return self.cursor.fetchall()
     
-    def delete_support_message(self, message_id: int):
+    def delete_support_message(self, message_id: int, user_id: int = None):
         self.cursor.execute("UPDATE support_messages SET is_deleted = TRUE WHERE message_id = %s", (message_id,))
         self.database.commit()
     
@@ -454,7 +454,7 @@ class MySQL:
         self.cursor.execute("SELECT * FROM trackers_messages WHERE tg_id = %s AND (is_deleted IS NULL OR is_deleted = FALSE) ORDER BY message_id ASC", (tg_id,))
         return self.cursor.fetchall()
     
-    def delete_tracker_message(self, message_id: int):
+    def delete_tracker_message(self, message_id: int, user_id: int = None):
         self.cursor.execute("UPDATE trackers_messages SET is_deleted = TRUE WHERE message_id = %s", (message_id,))
         self.database.commit()
     
@@ -462,7 +462,7 @@ class MySQL:
         self.cursor.execute("SELECT * FROM psychologist_messages WHERE tg_id = %s AND (is_deleted IS NULL OR is_deleted = FALSE) ORDER BY message_id ASC", (tg_id,))
         return self.cursor.fetchall()
     
-    def delete_psychologist_message(self, message_id: int):
+    def delete_psychologist_message(self, message_id: int, user_id: int = None):
         self.cursor.execute("UPDATE psychologist_messages SET is_deleted = TRUE WHERE message_id = %s", (message_id,))
         self.database.commit()
     
