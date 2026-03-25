@@ -744,6 +744,22 @@ async def handle_alice_request(request: Request):
     return HTMLResponse(content=html_response, status_code=200)
 
 
+@app.get("/mentor_dashboard")
+async def mentor_dashboard_page():
+    async with aiofiles.open("html_pages/mentor_dashboard.html", mode="r", encoding="utf-8") as f:
+        html_response = await f.read()
+
+    return HTMLResponse(content=html_response, status_code=200)
+
+
+@app.get("/tracker_personal_dashboard")
+async def tracker_personal_dashboard_page():
+    async with aiofiles.open("html_pages/tracker_personal_dashboard.html", mode="r", encoding="utf-8") as f:
+        html_response = await f.read()
+
+    return HTMLResponse(content=html_response, status_code=200)
+
+
 # Функционал с поддержкой
 @app.get("/get_support_chat")
 async def handle_alice_request(request: Request):

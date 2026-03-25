@@ -488,6 +488,9 @@ class MySQL:
         return False
     
     def is_tracker(self, chat_id: int):
+        if str(chat_id) in [str(i) for i in config.MANUAL_TRACKER_USER_IDS]:
+            return True
+
         for i in config.SHEETS_DATA["tracker_ids"]:
             if i["chat_id"] == str(chat_id):
                 return True
@@ -502,6 +505,9 @@ class MySQL:
         return None
     
     def get_tracker_by_id(self, chat_id: int):
+        if str(chat_id) in [str(i) for i in config.MANUAL_TRACKER_USER_IDS]:
+            return {"tracker_name": "Ручной трекер", "chat_id": str(chat_id)}
+
         for i in config.SHEETS_DATA["tracker_ids"]:
             if i["chat_id"] == str(chat_id):
                 return i
@@ -515,7 +521,9 @@ class MySQL:
         return config.SHEETS_DATA["tracker_ids"]
     
     def get_trackers_chats(self):
-        return [str(i["chat_id"]) for i in config.SHEETS_DATA["tracker_ids"]]
+        sheet_trackers = [str(i["chat_id"]) for i in config.SHEETS_DATA["tracker_ids"]]
+        manual_trackers = [str(i) for i in config.MANUAL_TRACKER_USER_IDS]
+        return list(set(sheet_trackers + manual_trackers))
 
     def get_chat_message(self, chat_id: int, message_id: int):
         self.cursor.execute("SELECT * FROM chat_messages WHERE chat_id = %s AND message_id = %s", (chat_id, message_id))

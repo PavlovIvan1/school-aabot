@@ -233,9 +233,26 @@ async def send_media_group(chat_id: int, bot):
 async def command_start_handler(message: Message, state: FSMContext) -> None:
     await state.clear()
 
+    support_chat_ids = [int(support_chat["support_chat_id"]) for support_chat in db.get_support_chats() if support_chat.get("support_chat_id")]
+    is_tracker_chat = db.is_tracker(message.chat.id) is not None
+    is_support_chat = message.chat.id in support_chat_ids
+    is_tracker_user = str(message.from_user.id) in [str(i) for i in config.MANUAL_TRACKER_USER_IDS]
+
+    if is_tracker_chat or is_support_chat or is_tracker_user:
+        await message.answer(
+            "Панель для команды\nОткройте дашборд активности и вовлечённости менторов:",
+            reply_markup=keyboard.staff_dashboard_keyboard()
+        )
+        return
+
     user_data = db.get_user(message.from_user.id)
 
     if len(user_data) == 0:
+        # In groups/supergroups do not start email onboarding flow.
+        # This prevents trackers/support from being stuck in GetAccess.email state.
+        if message.chat.type != 'private':
+            return
+
         start_args = None if len(message.text.split()) == 1 else "".join(message.text.split()[1:])
         link_access_data = None if start_args is None else db.get_link_access_by_user_id(start_args)
 
@@ -287,6 +304,23 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
 @start_router.callback_query(F.data == 'main')
 async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
+
+    support_chat_ids = [int(support_chat["support_chat_id"]) for support_chat in db.get_support_chats() if support_chat.get("support_chat_id")]
+    is_tracker_chat = db.is_tracker(call.message.chat.id) is not None
+    is_support_chat = call.message.chat.id in support_chat_ids
+    is_tracker_user = str(call.from_user.id) in [str(i) for i in config.MANUAL_TRACKER_USER_IDS]
+
+    if is_tracker_chat or is_support_chat or is_tracker_user:
+        try:
+            await call.message.delete()
+        except:
+            pass
+
+        await call.message.answer(
+            "Панель для команды\nОткройте дашборд активности и вовлечённости менторов:",
+            reply_markup=keyboard.staff_dashboard_keyboard()
+        )
+        return
 
     try:
         await call.message.delete()
@@ -561,6 +595,11 @@ async def homework_is_done(call: CallbackQuery) -> None:
 
 @start_router.message(GetAccess.email)
 async def command_start_handler(message: Message, state: FSMContext) -> None:
+    # Prevent email onboarding flow from hijacking messages in group chats
+    if message.chat.type != 'private':
+        await state.clear()
+        return
+
     if not message.text:
         await message.answer("Пожалуйста, введите email текстовым сообщением")
         return

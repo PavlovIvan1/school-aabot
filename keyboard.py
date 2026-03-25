@@ -354,3 +354,12 @@ def web_app_tracker_list_keyboard(chat_id):
     builder = InlineKeyboardBuilder()
     builder.row(InlineKeyboardButton(text="Список учеников", url=f"https://rb.infinitydev.tw1.su/get_tracker_chats_list?chat_id={chat_id}"))
     return builder.as_markup()
+
+
+def staff_dashboard_keyboard() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+
+    builder.row(InlineKeyboardButton(text="📊 Дашборд менторов", url="https://rb.infinitydev.tw1.su/mentor_dashboard"))
+    builder.row(InlineKeyboardButton(text="👤 Личные чаты: трекер-ученик", url="https://rb.infinitydev.tw1.su/tracker_personal_dashboard"))
+
+    return builder.as_markup()

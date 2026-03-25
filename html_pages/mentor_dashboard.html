@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Мониторинг качества работы менторов</title>
+  <style>
+    :root {
+      --bg: #1a1a1a;
+      --bg-soft: #222;
+      --card: #252525;
+      --line: #323232;
+      --text: #e7e7e7;
+      --muted: #a1a1a1;
+      --green: #57c17b;
+      --yellow: #d8b65a;
+      --red: #d76f6f;
+    }
+    * { box-sizing: border-box; font-family: Arial, sans-serif; }
+    body { margin: 0; background: var(--bg); color: var(--text); }
+    .wrap { max-width: 1400px; margin: 0 auto; padding: 14px; }
+    .panel { background: var(--bg-soft); border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+    h1 { margin: 0; font-size: 18px; }
+    .sub { color: var(--muted); font-size: 12px; margin-top: 6px; }
+    .filters { display: grid; grid-template-columns: repeat(6, minmax(120px, 1fr)); gap: 8px; margin-top: 10px; }
+    .filters select, .filters button { height: 34px; border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 8px; padding: 0 10px; font-size: 13px; }
+    .filters button { cursor: pointer; }
+    .filters button:hover { background: #2b2b2b; }
+    .kpis { display: grid; grid-template-columns: repeat(4, minmax(160px, 1fr)); gap: 10px; }
+    .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+    .kpi .t { color: var(--muted); font-size: 12px; min-height: 30px; }
+    .kpi .v { font-size: 20px; margin-top: 8px; }
+    .kpi .d { font-size: 12px; color: var(--muted); margin-top: 6px; }
+    .badge { display: inline-flex; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+    .g { background: var(--green); }
+    .y { background: var(--yellow); }
+    .r { background: var(--red); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { border-bottom: 1px solid var(--line); padding: 8px; text-align: left; }
+    th { color: var(--muted); font-size: 12px; }
+    tr.row:hover { background: #2b2b2b; cursor: pointer; }
+    .grid-2 { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; }
+    .mini-title { margin: 0 0 8px 0; font-size: 14px; }
+    .chip { border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; margin-bottom: 6px; font-size: 12px; background: #2a2a2a; }
+    a.action { color: #d0d0d0; text-decoration: none; border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; }
+    a.action:hover { background: #303030; }
+    @media (max-width: 1100px) {
+      .filters { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
+      .kpis { grid-template-columns: repeat(2, minmax(150px, 1fr)); }
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <h1>Мониторинг качества работы менторов</h1>
+      <div class="sub">Дашборд «Менторы: активность и вовлечённость»</div>
+      <div class="filters">
+        <select id="period"><option>Сегодня</option><option selected>Последние 7 дней</option><option>Последние 30 дней</option><option>Произвольный</option></select>
+        <select id="stream"></select>
+        <select id="mentor"></select>
+        <select id="group"></select>
+        <select id="week"></select>
+        <button id="apply">Применить фильтры</button>
+      </div>
+    </div>
+
+    <div class="kpis" id="kpis"></div>
+
+    <div class="panel" style="margin-top:10px;">
+      <h3 class="mini-title">Чаты / группы</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Чат</th><th>Ментор</th><th>Поток</th><th>Неделя</th><th>⏱️ Ср. ответ</th><th>⏸️ Макс. пауза</th><th>💬 Инициативность</th><th>👥 Активность</th><th>Статус</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+
+    <div class="grid-2">
+      <div class="panel">
+        <h3 class="mini-title">Детальная карточка чата</h3>
+        <div id="detail" class="sub">Нажмите на строку чата в таблице выше</div>
+      </div>
+      <div class="panel">
+        <h3 class="mini-title">Звёзды недели</h3>
+        <div id="stars"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3 class="mini-title">Проблемные зоны (автосигналы)</h3>
+      <table>
+        <thead><tr><th>Проблема</th><th>Группа</th><th>Ментор</th><th>Поток</th><th>Значение</th><th>Норма</th><th>Действие</th></tr></thead>
+        <tbody id="problems"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const data = [
+      {chat:'Рилсанутые', mentor:'Иванов И.', stream:'15.7', week:3, start:'2026-03-10', students:18, link:'https://t.me/c/123/1', avg:1.8, pause:18, init:38, student:2.1},
+      {chat:'Стархит', mentor:'Иванов И.', stream:'15.8', week:3, start:'2026-03-10', students:16, link:'https://t.me/c/123/2', avg:3.2, pause:45, init:24, student:1.5},
+      {chat:'Богини', mentor:'Петрова А.', stream:'15.6', week:1, start:'2026-03-20', students:20, link:'https://t.me/c/123/3', avg:8.5, pause:75, init:12, student:0.9},
+      {chat:'Рилсрум', mentor:'Кузнецов А.', stream:'15.9', week:5, start:'2026-02-20', students:14, link:'https://t.me/c/123/4', avg:2.1, pause:12, init:41, student:1.9}
+    ];
+
+    const $ = id => document.getElementById(id);
+    const statusAvg = v => v < 3 ? 'g' : (v <= 5 ? 'y' : 'r');
+    const statusPause = v => v < 30 ? 'g' : (v <= 60 ? 'y' : 'r');
+    const statusInit = v => v > 30 ? 'g' : (v >= 20 ? 'y' : 'r');
+    const statusStudent = v => v > 1 ? 'g' : (v >= 0.5 ? 'y' : 'r');
+    const txt = c => c==='g'?'🟢':(c==='y'?'🟡':'🔴');
+    const overall = r => [statusAvg(r.avg), statusPause(r.pause), statusInit(r.init), statusStudent(r.student)].includes('r') ? 'r' : ([statusAvg(r.avg), statusPause(r.pause), statusInit(r.init), statusStudent(r.student)].includes('y') ? 'y' : 'g');
+
+    function uniq(arr, key){ return ['Все', ...new Set(arr.map(i=>i[key]))]; }
+
+    function fillFilters(){
+      const streams = uniq(data, 'stream');
+      const mentors = uniq(data, 'mentor');
+      $('stream').innerHTML = streams.map(v=>`<option>${v}</option>`).join('');
+      $('mentor').innerHTML = mentors.map(v=>`<option>${v}</option>`).join('');
+      $('week').innerHTML = ['Все',1,2,3,4,5,6,7,8].map(v=>`<option>${v}</option>`).join('');
+      rebuildGroup();
+    }
+
+    function rebuildGroup(){
+      let filtered = data;
+      if($('stream').value !== 'Все') filtered = filtered.filter(i=>i.stream === $('stream').value);
+      if($('mentor').value !== 'Все') filtered = filtered.filter(i=>i.mentor === $('mentor').value);
+      $('group').innerHTML = ['Все', ...new Set(filtered.map(i=>i.chat))].map(v=>`<option>${v}</option>`).join('');
+    }
+
+    function getFiltered(){
+      return data.filter(i =>
+        ($('stream').value === 'Все' || i.stream === $('stream').value) &&
+        ($('mentor').value === 'Все' || i.mentor === $('mentor').value) &&
+        ($('group').value === 'Все' || i.chat === $('group').value) &&
+        ($('week').value === 'Все' || String(i.week) === String($('week').value))
+      );
+    }
+
+    function avg(arr, key){ return arr.length ? arr.reduce((s,i)=>s+i[key],0)/arr.length : 0; }
+
+    function renderKpis(rows){
+      const a = avg(rows,'avg');
+      const p = avg(rows,'pause');
+      const i = avg(rows,'init');
+      const np = rows.length ? Math.round(rows.filter(r=>r.pause < 30).length / rows.length * 100) : 0;
+      const cards = [
+        {t:'Среднее время ответа (в рабочих часах)', v:`${a.toFixed(1)} ч`, c:statusAvg(a), d:'▲ +0.3 за неделю'},
+        {t:'Средняя макс. пауза в раб. время (минуты)', v:`${Math.round(p)} мин`, c:statusPause(p), d:'▼ +8 мин за неделю'},
+        {t:'Средняя инициативность (%)', v:`${Math.round(i)}%`, c:statusInit(i), d:'▲ +5% за неделю'},
+        {t: rows.length===1 ? 'Макс. пауза сегодня' : 'Доля чатов без длит. пауз', v: rows.length===1 ? `${Math.round(p)} мин` : `${np}%`, c: rows.length===1 ? statusPause(p) : (np>70?'g':(np>=50?'y':'r')), d:'▼ -3% за неделю'}
+      ];
+      $('kpis').innerHTML = cards.map(c => `<div class="kpi"><div class="t">${c.t}</div><div class="v"><span class="badge ${c.c}"></span>${c.v}</div><div class="d">${c.d}</div></div>`).join('');
+    }
+
+    function renderTable(rows){
+      $('rows').innerHTML = rows.map((r, idx) => `
+        <tr class="row" data-idx="${idx}">
+          <td>${r.chat}</td><td>${r.mentor}</td><td>${r.stream}</td><td>${r.week}</td>
+          <td>${txt(statusAvg(r.avg))} ${r.avg.toFixed(1)} ч</td>
+          <td>${txt(statusPause(r.pause))} ${Math.round(r.pause)}</td>
+          <td>${txt(statusInit(r.init))} ${Math.round(r.init)}%</td>
+          <td>${txt(statusStudent(r.student))} ${r.student.toFixed(1)}</td>
+          <td>${txt(overall(r))}</td>
+        </tr>
+      `).join('');
+      [...document.querySelectorAll('tr.row')].forEach((el, idx) => el.onclick = () => renderDetail(rows[idx]));
+    }
+
+    function renderDetail(r){
+      $('detail').innerHTML = `
+        <div class="chip"><b>Группа:</b> ${r.chat}</div>
+        <div class="chip"><b>Ментор:</b> ${r.mentor}</div>
+        <div class="chip"><b>Поток:</b> ${r.stream}</div>
+        <div class="chip"><b>Неделя обучения:</b> ${r.week}</div>
+        <div class="chip"><b>Дата старта потока:</b> ${new Date(r.start).toLocaleDateString('ru-RU')}</div>
+        <div class="chip"><b>Количество учеников:</b> ${r.students}</div>
+        <div class="chip"><a class="action" href="${r.link}" target="_blank">Открыть Telegram-чат</a></div>
+      `;
+    }
+
+    function renderProblems(rows){
+      const items = [];
+      rows.forEach(r=>{
+        if(statusAvg(r.avg)==='r') items.push({p:'🔴 Время ответа > 5 ч', r, v:`${r.avg.toFixed(1)} ч`, n:'< 3 ч', a:'Написать'});
+        if(statusPause(r.pause)==='r') items.push({p:'🔴 Макс. пауза > 60 мин', r, v:`${Math.round(r.pause)} мин`, n:'< 30 мин', a:'Написать'});
+        if(statusInit(r.init)==='r') items.push({p:'🔴 Инициативность < 20%', r, v:`${Math.round(r.init)}%`, n:'> 30%', a:'Написать'});
+        if(statusStudent(r.student)==='y' || statusStudent(r.student)==='r') items.push({p:'🟡 Активность учеников низкая', r, v:`${r.student.toFixed(1)}`, n:'> 1.0', a:'Посмотреть'});
+      });
+      $('problems').innerHTML = items.map(i=>`<tr><td>${i.p}</td><td>${i.r.chat}</td><td>${i.r.mentor}</td><td>${i.r.stream}</td><td>${i.v}</td><td>${i.n}</td><td><a class="action" href="${i.r.link}" target="_blank">${i.a}</a></td></tr>`).join('') || '<tr><td colspan="7" class="sub">Проблемных зон за выбранный период не найдено</td></tr>';
+    }
+
+    function renderStars(rows){
+      if(!rows.length){ $('stars').innerHTML = '<div class="sub">Нет данных</div>'; return; }
+      const fast = [...rows].sort((a,b)=>a.avg-b.avg)[0];
+      const init = [...rows].sort((a,b)=>b.init-a.init)[0];
+      const pause = [...rows].sort((a,b)=>a.pause-b.pause)[0];
+      $('stars').innerHTML = `
+        <div class="chip">⭐ Самый быстрый ответ: <b>${fast.mentor}</b> (${fast.avg.toFixed(1)} ч) — <a class="action" href="${fast.link}" target="_blank">🔗</a></div>
+        <div class="chip">⭐ Самая высокая инициативность: <b>${init.mentor}</b> (${Math.round(init.init)}%) — <a class="action" href="${init.link}" target="_blank">🔗</a></div>
+        <div class="chip">⭐ Ноль длинных пауз: <b>${pause.mentor}</b> (макс. ${Math.round(pause.pause)} мин) — <a class="action" href="${pause.link}" target="_blank">🔗</a></div>
+      `;
+    }
+
+    function refresh(){
+      const rows = getFiltered();
+      renderKpis(rows);
+      renderTable(rows);
+      renderProblems(rows);
+      renderStars(rows);
+      $('detail').innerHTML = '<span class="sub">Нажмите на строку чата в таблице выше</span>';
+    }
+
+    fillFilters();
+    $('stream').addEventListener('change', rebuildGroup);
+    $('mentor').addEventListener('change', rebuildGroup);
+    $('apply').addEventListener('click', refresh);
+    refresh();
+  </script>
+</body>
+</html>

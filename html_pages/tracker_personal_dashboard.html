@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Личные чаты трекеров</title>
+  <style>
+    :root { --bg:#1a1a1a; --bg2:#222; --card:#262626; --line:#343434; --text:#e8e8e8; --muted:#a6a6a6; --g:#58c37f; --y:#d7b15a; --r:#d86e6e; }
+    *{box-sizing:border-box;font-family:Arial,sans-serif}
+    body{margin:0;background:var(--bg);color:var(--text)}
+    .wrap{max-width:1400px;margin:0 auto;padding:14px}
+    .panel{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px}
+    h1{margin:0;font-size:18px}.sub{margin-top:6px;color:var(--muted);font-size:12px}
+    .filters{display:grid;grid-template-columns:repeat(5,minmax(140px,1fr));gap:8px;margin-top:10px}
+    select,button{height:34px;background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:0 10px}
+    button{cursor:pointer} button:hover{background:#2d2d2d}
+    .kpis{display:grid;grid-template-columns:repeat(4,minmax(180px,1fr));gap:10px}
+    .kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px}
+    .kpi .t{font-size:12px;color:var(--muted)} .kpi .v{font-size:20px;margin-top:8px}
+    .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}.g{background:var(--g)}.y{background:var(--y)}.r{background:var(--r)}
+    table{width:100%;border-collapse:collapse;font-size:13px} th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left} th{font-size:12px;color:var(--muted)}
+    tr.row:hover{background:#2d2d2d;cursor:pointer}
+    .grid{display:grid;grid-template-columns:2fr 1fr;gap:10px}
+    .chip{background:#2b2b2b;border:1px solid var(--line);border-radius:8px;padding:7px 8px;margin-bottom:6px;font-size:12px}
+    .action{color:#d5d5d5;text-decoration:none;border:1px solid var(--line);border-radius:6px;padding:2px 6px}.action:hover{background:#313131}
+    @media(max-width:1100px){.filters{grid-template-columns:repeat(2,minmax(120px,1fr))}.kpis{grid-template-columns:repeat(2,minmax(160px,1fr))}.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="panel">
+    <h1>Личные чаты «Трекер — Ученик»</h1>
+    <div class="sub">Рабочее время: Пн–Пт, 10:00–19:00</div>
+    <div class="filters">
+      <select id="period"><option>Сегодня</option><option selected>Неделя</option><option>Месяц</option><option>Произвольный</option></select>
+      <select id="stream"></select>
+      <select id="tracker"></select>
+      <select id="week"></select>
+      <button id="apply">Применить</button>
+    </div>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="panel">
+    <table>
+      <thead><tr><th>Трекер</th><th>Ученик</th><th>Поток</th><th>Группа</th><th>Неделя</th><th>⏱️ Ср. ответ</th><th>⏸️ Макс. пауза</th><th>💬 Инициативность</th><th>Статус</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+
+  <div class="grid">
+    <div class="panel"><h3 style="margin:0 0 8px 0;font-size:14px;">Детальная карточка чата</h3><div id="detail" class="sub">Нажмите на строку чата</div></div>
+    <div class="panel"><h3 style="margin:0 0 8px 0;font-size:14px;">Лучшие практики</h3><div id="stars"></div></div>
+  </div>
+
+  <div class="panel">
+    <h3 style="margin:0 0 8px 0;font-size:14px;">Проблемные зоны</h3>
+    <table><thead><tr><th>Проблема</th><th>Трекер</th><th>Ученик</th><th>Поток</th><th>Знач.</th><th>Норма</th></tr></thead><tbody id="problems"></tbody></table>
+  </div>
+</div>
+
+<script>
+  const rows = [
+    {tracker:'Иванова М.', student:'Петров А.', stream:'15.7', tariff:'VIP', week:3, avg:1.2, pause:12, init:42, link:'https://t.me/c/123/21'},
+    {tracker:'Иванова М.', student:'Сидоров К.', stream:'15.8', tariff:'PRO', week:3, avg:3.5, pause:480, init:28, link:'https://t.me/c/123/22'},
+    {tracker:'Петрова А.', student:'Смирнова Е.', stream:'15.8', tariff:'VIP', week:1, avg:8.5, pause:540, init:10, link:'https://t.me/c/123/23'},
+    {tracker:'Смирнова Е.', student:'Кузнецов В.', stream:'15.9', tariff:'PRO', week:5, avg:0.5, pause:40, init:45, link:'https://t.me/c/123/24'}
+  ];
+  const $ = i => document.getElementById(i);
+  const stAvg=v=>v<3?'g':(v<=5?'y':'r');
+  const stPause=v=>v<360?'g':(v<=540?'y':'r');
+  const stInit=v=>v>30?'g':(v>=20?'y':'r');
+  const em=s=>s==='g'?'🟢':(s==='y'?'🟡':'🔴');
+  const overall=r=>[stAvg(r.avg),stPause(r.pause),stInit(r.init)].includes('r')?'r':([stAvg(r.avg),stPause(r.pause),stInit(r.init)].includes('y')?'y':'g');
+
+  function initFilters(){
+    $('stream').innerHTML=['Все',...new Set(rows.map(r=>r.stream))].map(v=>`<option>${v}</option>`).join('');
+    $('tracker').innerHTML=['Все',...new Set(rows.map(r=>r.tracker))].map(v=>`<option>${v}</option>`).join('');
+    $('week').innerHTML=['Все',1,2,3,4,5,6,7,8].map(v=>`<option>${v}</option>`).join('');
+  }
+  function filtered(){
+    return rows.filter(r=>($('stream').value==='Все'||r.stream===$('stream').value)&&($('tracker').value==='Все'||r.tracker===$('tracker').value)&&($('week').value==='Все'||String(r.week)===$('week').value));
+  }
+  function mean(arr,key){return arr.length?arr.reduce((s,x)=>s+x[key],0)/arr.length:0}
+  function renderKpis(ds){
+    const a=mean(ds,'avg'), p=mean(ds,'pause'), active=Math.round(ds.filter(i=>i.avg>0).length/Math.max(ds.length,1)*100), fast=Math.round(ds.filter(i=>i.avg<3).length/Math.max(ds.length,1)*100);
+    const cards=[
+      ['Среднее время ответа (в рабочих часах)',`${a.toFixed(1)} ч`,stAvg(a),'▼ -0.2 за нед'],
+      ['Средняя макс. пауза в раб. время (минуты)',`${Math.round(p)} мин`,stPause(p),'▲ +5 за нед'],
+      ['Доля чатов с активностью',`${active}%`,active>80?'g':(active>=60?'y':'r'),'▼ -3% за нед'],
+      ['% учеников с ответом <3 ч',`${fast}%`,fast>80?'g':(fast>=60?'y':'r'),'▲ +2% за нед']
+    ];
+    $('kpis').innerHTML=cards.map(c=>`<div class="kpi"><div class="t">${c[0]}</div><div class="v"><span class="dot ${c[2]}"></span>${c[1]}</div><div class="sub">${c[3]}</div></div>`).join('');
+  }
+  function renderTable(ds){
+    $('rows').innerHTML=ds.map((r,i)=>`<tr class="row" data-i="${i}"><td>${r.tracker}</td><td>${r.student}</td><td>${r.stream}</td><td>${r.tariff}</td><td>${r.week}</td><td>${em(stAvg(r.avg))} ${r.avg.toFixed(1)}</td><td>${em(stPause(r.pause))} ${Math.round(r.pause)}</td><td>${em(stInit(r.init))} ${Math.round(r.init)}%</td><td>${em(overall(r))}</td></tr>`).join('');
+    [...document.querySelectorAll('tr.row')].forEach((el,i)=>el.onclick=()=>renderDetail(ds[i]));
+  }
+  function renderDetail(r){
+    $('detail').innerHTML=`<div class="chip"><b>Трекер:</b> ${r.tracker}</div><div class="chip"><b>Ученик:</b> ${r.student}</div><div class="chip"><b>Поток:</b> ${r.stream}</div><div class="chip"><b>Тариф:</b> ${r.tariff}</div><div class="chip"><b>Неделя:</b> ${r.week}</div><div class="chip"><a class="action" target="_blank" href="${r.link}">Открыть чат</a></div><div class="chip">Графики динамики за 8 недель — место для интеграции данных</div>`;
+  }
+  function renderProblems(ds){
+    const p=[]; ds.forEach(r=>{ if(stAvg(r.avg)==='r') p.push(['🔴 Время ответа > 5 ч',r,`${r.avg.toFixed(1)} ч`,'<3 ч']); if(stPause(r.pause)==='r') p.push(['🔴 Макс. пауза > 540',r,`${Math.round(r.pause)}`,'<360']); if(stInit(r.init)==='r') p.push(['🔴 Инициативность < 20%',r,`${Math.round(r.init)}%`,'>30%']); });
+    $('problems').innerHTML=p.map(i=>`<tr><td>${i[0]}</td><td>${i[1].tracker}</td><td>${i[1].student}</td><td>${i[1].stream}</td><td>${i[2]}</td><td>${i[3]}</td></tr>`).join('')||'<tr><td colspan="6" class="sub">Красных сигналов нет</td></tr>';
+  }
+  function renderStars(ds){
+    if(!ds.length){$('stars').innerHTML='<div class="sub">Нет данных</div>';return;}
+    const fastest=[...ds].sort((a,b)=>a.avg-b.avg)[0], initiative=[...ds].sort((a,b)=>b.init-a.init)[0];
+    $('stars').innerHTML=`<div class="chip">⭐ Самый быстрый ответ: <b>${fastest.tracker}</b> / ${fastest.student} (${fastest.avg.toFixed(1)} ч) <a class="action" href="${fastest.link}" target="_blank">🔗</a></div><div class="chip">⭐ Самая высокая инициативность: <b>${initiative.tracker}</b> / ${initiative.student} (${Math.round(initiative.init)}%) <a class="action" href="${initiative.link}" target="_blank">🔗</a></div>`;
+  }
+  function refresh(){ const ds=filtered(); renderKpis(ds); renderTable(ds); renderProblems(ds); renderStars(ds); $('detail').innerHTML='<span class="sub">Нажмите на строку чата</span>'; }
+  initFilters(); $('apply').addEventListener('click', refresh); refresh();
+</script>
+</body>
+</html>
