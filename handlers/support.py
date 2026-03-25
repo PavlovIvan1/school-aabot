@@ -297,7 +297,7 @@ async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
             for chat in support_chats:
                 try:
                     await call.bot.send_message(
-                        chat['chat_id'],
+                        int(chat['support_chat_id']),
                         f"📞 Новая заявка на звонок!\n\n"
                         f"Пользователь: {user_name}\n"
                         f"ID: {call.from_user.id}\n"
@@ -425,7 +425,7 @@ async def call_time_handler(call: CallbackQuery, state: FSMContext) -> None:
         for chat in support_chats:
             try:
                 await call.bot.send_message(
-                    chat['chat_id'],
+                    int(chat['support_chat_id']),
                     f"📞 Новая заявка на звонок!\n\n"
                     f"Пользователь: {user_name}\n"
                     f"ID: {call.from_user.id}\n"
