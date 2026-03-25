@@ -101,12 +101,7 @@
   </div>
 
   <script>
-    const data = [
-      {chat:'Рилсанутые', mentor:'Иванов И.', stream:'15.7', week:3, start:'2026-03-10', students:18, link:'https://t.me/c/123/1', avg:1.8, pause:18, init:38, student:2.1},
-      {chat:'Стархит', mentor:'Иванов И.', stream:'15.8', week:3, start:'2026-03-10', students:16, link:'https://t.me/c/123/2', avg:3.2, pause:45, init:24, student:1.5},
-      {chat:'Богини', mentor:'Петрова А.', stream:'15.6', week:1, start:'2026-03-20', students:20, link:'https://t.me/c/123/3', avg:8.5, pause:75, init:12, student:0.9},
-      {chat:'Рилсрум', mentor:'Кузнецов А.', stream:'15.9', week:5, start:'2026-02-20', students:14, link:'https://t.me/c/123/4', avg:2.1, pause:12, init:41, student:1.9}
-    ];
+    const data = {DASHBOARD_DATA_JSON};
 
     const $ = id => document.getElementById(id);
     const statusAvg = v => v < 3 ? 'g' : (v <= 5 ? 'y' : 'r');

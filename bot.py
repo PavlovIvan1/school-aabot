@@ -746,16 +746,167 @@ async def handle_alice_request(request: Request):
 
 @app.get("/mentor_dashboard")
 async def mentor_dashboard_page():
+    dashboard_data = []
+
+    # 1) Пытаемся взять агрегированные дневные метрики
+    daily_rows = db.get_mentor_dashboard_daily()
+
+    if len(daily_rows) != 0:
+        for row in daily_rows:
+            dashboard_data.append({
+                "chat": f"Чат {row['chat_id']}",
+                "mentor": row.get("mentor_name") or f"ID {row.get('mentor_id', '')}",
+                "stream": row.get("stream_id") or "—",
+                "week": row.get("week_number") or 1,
+                "start": str(row.get("stream_start_date") or datetime.date.today()),
+                "students": 0,
+                "link": "#",
+                "avg": float(row.get("avg_response_time_hours") or 0),
+                "pause": int(row.get("max_pause_minutes") or 0),
+                "init": float(row.get("initiative_percent") or 0),
+                "student": float(row.get("student_activity_per_user") or 0),
+            })
+    else:
+        # 2) Fallback на реальные расчёты из существующих таблиц
+        engagement_rows = db.get_tracker_engagement()
+
+        for row in engagement_rows:
+            tracker_data = db.get_tracker_by_id(row["owner_id"])
+            tracker_activity = db.get_tracker_activity(row["chat_id"])
+            tracker_avg = db.get_tracker_avg_response_time(row["chat_id"], row["owner_id"])
+
+            dashboard_data.append({
+                "chat": f"Чат {row['chat_id']}",
+                "mentor": tracker_data["tracker_name"] if tracker_data is not None else f"ID {row['owner_id']}",
+                "stream": row.get("most_common_flow_in_chat") or "—",
+                "week": 1,
+                "start": str(datetime.date.today()),
+                "students": int(tracker_activity.get("total_students", 0)) if tracker_activity else 0,
+                "link": "#",
+                "avg": float((tracker_avg or {}).get("avg_response_hours") or 0),
+                "pause": 0,
+                "init": float(row.get("engagement_percent_in_chat") or 0),
+                "student": float((tracker_activity or {}).get("chat_activity_score") or 0),
+            })
+
     async with aiofiles.open("html_pages/mentor_dashboard.html", mode="r", encoding="utf-8") as f:
         html_response = await f.read()
+
+    html_response = html_response.replace("{DASHBOARD_DATA_JSON}", json.dumps(dashboard_data, ensure_ascii=False))
 
     return HTMLResponse(content=html_response, status_code=200)
 
 
 @app.get("/tracker_personal_dashboard")
 async def tracker_personal_dashboard_page():
+    dashboard_data = []
+
+    # 1) Пытаемся взять агрегированные дневные метрики
+    daily_rows = db.get_tracker_personal_dashboard_daily()
+
+    if len(daily_rows) != 0:
+        for row in daily_rows:
+            dashboard_data.append({
+                "tracker": row.get("tracker_name") or f"ID {row.get('tracker_id', '')}",
+                "student": row.get("student_name") or f"ID {row.get('student_tg_id', '')}",
+                "stream": row.get("stream_id") or "—",
+                "tariff": row.get("tariff") or "—",
+                "week": row.get("week_number") or 1,
+                "avg": float(row.get("avg_response_time_hours") or 0),
+                "pause": int(row.get("max_pause_minutes") or 0),
+                "init": float(row.get("initiative_percent") or 0),
+                "link": "#",
+            })
+    else:
+        # 2) Fallback на реальные диалоги из trackers_messages
+        user_ids = db.get_tracker_dialog_user_ids()
+
+        for user_id in user_ids:
+            messages = db.get_trackers_messages_by_tg_id(int(user_id))
+            if len(messages) < 2:
+                continue
+
+            user_data = db.get_user(int(user_id))
+            if len(user_data) == 0:
+                continue
+
+            email = user_data[0].get("email", "")
+            flow = db.get_flow_by_email(email) or "—"
+            tariff = config.USERS_ADDITIONAL_INFO.get(email.lower(), {}).get("tariff", "—")
+
+            tracker_chat_id = messages[-1].get("chat_id")
+            tracker_data = db.get_tracker_by_id(tracker_chat_id)
+            tracker_name = tracker_data["tracker_name"] if tracker_data else f"ID {tracker_chat_id}"
+
+            # Среднее время ответа: вопрос пользователя -> следующий ответ трекера
+            response_hours = []
+            for i, msg in enumerate(messages):
+                if not msg.get("from_user"):
+                    continue
+
+                text = (msg.get("message_text") or "")
+                if "?" not in text and "почему" not in text.lower() and "как" not in text.lower():
+                    continue
+
+                q_time = int(msg.get("unix_time") or 0)
+                for j in range(i + 1, len(messages)):
+                    if not messages[j].get("from_user"):
+                        a_time = int(messages[j].get("unix_time") or 0)
+                        if a_time > q_time:
+                            response_hours.append((a_time - q_time) / 3600)
+                        break
+
+            avg_response = round(sum(response_hours) / len(response_hours), 2) if len(response_hours) else 0
+
+            # Макс пауза между любыми соседними сообщениями (мин)
+            max_pause = 0
+            for i in range(1, len(messages)):
+                prev_t = int(messages[i - 1].get("unix_time") or 0)
+                cur_t = int(messages[i].get("unix_time") or 0)
+                if cur_t > prev_t:
+                    max_pause = max(max_pause, int((cur_t - prev_t) / 60))
+
+            # Инициативность трекера: сообщение трекера не сразу ответом в 360 мин
+            tracker_msgs = [m for m in messages if not m.get("from_user")]
+            initiative_count = 0
+
+            for idx, m in enumerate(messages):
+                if m.get("from_user"):
+                    continue
+
+                if idx == 0:
+                    initiative_count += 1
+                    continue
+
+                prev_m = messages[idx - 1]
+                if not prev_m.get("from_user"):
+                    initiative_count += 1
+                    continue
+
+                delta_min = (int(m.get("unix_time") or 0) - int(prev_m.get("unix_time") or 0)) / 60
+                if delta_min > 360:
+                    initiative_count += 1
+
+            initiative_percent = round((initiative_count / len(tracker_msgs)) * 100, 2) if len(tracker_msgs) else 0
+
+            student_name = user_data[0].get("email", f"ID {user_id}")
+
+            dashboard_data.append({
+                "tracker": tracker_name,
+                "student": student_name,
+                "stream": flow,
+                "tariff": tariff,
+                "week": 1,
+                "avg": avg_response,
+                "pause": max_pause,
+                "init": initiative_percent,
+                "link": "#",
+            })
+
     async with aiofiles.open("html_pages/tracker_personal_dashboard.html", mode="r", encoding="utf-8") as f:
         html_response = await f.read()
+
+    html_response = html_response.replace("{TRACKER_PERSONAL_DATA_JSON}", json.dumps(dashboard_data, ensure_ascii=False))
 
     return HTMLResponse(content=html_response, status_code=200)
 

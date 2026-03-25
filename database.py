@@ -65,6 +65,48 @@ class MySQL:
         except:
             pass
 
+        # Агрегированные дневные метрики для дашборда менторов (групповые чаты)
+        self.cursor.execute("""CREATE TABLE IF NOT EXISTS mentor_dashboard_daily (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            metric_date DATE NOT NULL,
+            chat_id BIGINT NOT NULL,
+            mentor_id BIGINT,
+            mentor_name VARCHAR(255),
+            stream_id VARCHAR(64),
+            stream_start_date DATE,
+            week_number INT,
+            avg_response_time_hours FLOAT,
+            max_pause_minutes INT,
+            initiative_percent FLOAT,
+            student_activity_per_user FLOAT,
+            avg_message_length FLOAT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uniq_mentor_daily (metric_date, chat_id)
+        )""")
+
+        # Агрегированные дневные метрики для личных чатов трекер-ученик
+        self.cursor.execute("""CREATE TABLE IF NOT EXISTS tracker_personal_dashboard_daily (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            metric_date DATE NOT NULL,
+            tracker_id BIGINT NOT NULL,
+            tracker_name VARCHAR(255),
+            student_tg_id BIGINT NOT NULL,
+            student_name VARCHAR(255),
+            stream_id VARCHAR(64),
+            tariff VARCHAR(64),
+            stream_start_date DATE,
+            week_number INT,
+            avg_response_time_hours FLOAT,
+            max_pause_minutes INT,
+            initiative_percent FLOAT,
+            dialogs_count INT DEFAULT 0,
+            fast_response_share_percent FLOAT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uniq_tracker_personal_daily (metric_date, tracker_id, student_tg_id)
+        )""")
+
         self.database.commit()
 
 
@@ -453,7 +495,11 @@ class MySQL:
     def get_trackers_messages_by_tg_id(self, tg_id: int):
         self.cursor.execute("SELECT * FROM trackers_messages WHERE tg_id = %s AND (is_deleted IS NULL OR is_deleted = FALSE) ORDER BY message_id ASC", (tg_id,))
         return self.cursor.fetchall()
-    
+
+    def get_tracker_dialog_user_ids(self):
+        self.cursor.execute("SELECT DISTINCT tg_id FROM trackers_messages WHERE (is_deleted IS NULL OR is_deleted = FALSE)")
+        return [i["tg_id"] for i in self.cursor.fetchall() if i.get("tg_id") is not None]
+
     def delete_tracker_message(self, message_id: int, user_id: int = None):
         self.cursor.execute("UPDATE trackers_messages SET is_deleted = TRUE WHERE message_id = %s", (message_id,))
         self.database.commit()
@@ -524,6 +570,127 @@ class MySQL:
         sheet_trackers = [str(i["chat_id"]) for i in config.SHEETS_DATA["tracker_ids"]]
         manual_trackers = [str(i) for i in config.MANUAL_TRACKER_USER_IDS]
         return list(set(sheet_trackers + manual_trackers))
+
+    def upsert_mentor_dashboard_daily(
+        self,
+        metric_date,
+        chat_id,
+        mentor_id,
+        mentor_name,
+        stream_id,
+        stream_start_date,
+        week_number,
+        avg_response_time_hours,
+        max_pause_minutes,
+        initiative_percent,
+        student_activity_per_user,
+        avg_message_length,
+    ):
+        self.cursor.execute(
+            """
+            INSERT INTO mentor_dashboard_daily (
+                metric_date, chat_id, mentor_id, mentor_name, stream_id, stream_start_date, week_number,
+                avg_response_time_hours, max_pause_minutes, initiative_percent, student_activity_per_user, avg_message_length
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                mentor_id = VALUES(mentor_id),
+                mentor_name = VALUES(mentor_name),
+                stream_id = VALUES(stream_id),
+                stream_start_date = VALUES(stream_start_date),
+                week_number = VALUES(week_number),
+                avg_response_time_hours = VALUES(avg_response_time_hours),
+                max_pause_minutes = VALUES(max_pause_minutes),
+                initiative_percent = VALUES(initiative_percent),
+                student_activity_per_user = VALUES(student_activity_per_user),
+                avg_message_length = VALUES(avg_message_length)
+            """,
+            (
+                metric_date, chat_id, mentor_id, mentor_name, stream_id, stream_start_date, week_number,
+                avg_response_time_hours, max_pause_minutes, initiative_percent, student_activity_per_user, avg_message_length
+            )
+        )
+        self.database.commit()
+
+    def get_mentor_dashboard_daily(self, date_from=None, date_to=None):
+        query = "SELECT * FROM mentor_dashboard_daily"
+        params = []
+
+        if date_from is not None and date_to is not None:
+            query += " WHERE metric_date BETWEEN %s AND %s"
+            params.extend([date_from, date_to])
+        elif date_from is not None:
+            query += " WHERE metric_date >= %s"
+            params.append(date_from)
+        elif date_to is not None:
+            query += " WHERE metric_date <= %s"
+            params.append(date_to)
+
+        query += " ORDER BY metric_date DESC, chat_id ASC"
+        self.cursor.execute(query, tuple(params))
+        return self.cursor.fetchall()
+
+    def upsert_tracker_personal_dashboard_daily(
+        self,
+        metric_date,
+        tracker_id,
+        tracker_name,
+        student_tg_id,
+        student_name,
+        stream_id,
+        tariff,
+        stream_start_date,
+        week_number,
+        avg_response_time_hours,
+        max_pause_minutes,
+        initiative_percent,
+        dialogs_count,
+        fast_response_share_percent,
+    ):
+        self.cursor.execute(
+            """
+            INSERT INTO tracker_personal_dashboard_daily (
+                metric_date, tracker_id, tracker_name, student_tg_id, student_name, stream_id, tariff,
+                stream_start_date, week_number, avg_response_time_hours, max_pause_minutes,
+                initiative_percent, dialogs_count, fast_response_share_percent
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                tracker_name = VALUES(tracker_name),
+                student_name = VALUES(student_name),
+                stream_id = VALUES(stream_id),
+                tariff = VALUES(tariff),
+                stream_start_date = VALUES(stream_start_date),
+                week_number = VALUES(week_number),
+                avg_response_time_hours = VALUES(avg_response_time_hours),
+                max_pause_minutes = VALUES(max_pause_minutes),
+                initiative_percent = VALUES(initiative_percent),
+                dialogs_count = VALUES(dialogs_count),
+                fast_response_share_percent = VALUES(fast_response_share_percent)
+            """,
+            (
+                metric_date, tracker_id, tracker_name, student_tg_id, student_name, stream_id, tariff,
+                stream_start_date, week_number, avg_response_time_hours, max_pause_minutes,
+                initiative_percent, dialogs_count, fast_response_share_percent
+            )
+        )
+        self.database.commit()
+
+    def get_tracker_personal_dashboard_daily(self, date_from=None, date_to=None):
+        query = "SELECT * FROM tracker_personal_dashboard_daily"
+        params = []
+
+        if date_from is not None and date_to is not None:
+            query += " WHERE metric_date BETWEEN %s AND %s"
+            params.extend([date_from, date_to])
+        elif date_from is not None:
+            query += " WHERE metric_date >= %s"
+            params.append(date_from)
+        elif date_to is not None:
+            query += " WHERE metric_date <= %s"
+            params.append(date_to)
+
+        query += " ORDER BY metric_date DESC, tracker_id ASC, student_tg_id ASC"
+        self.cursor.execute(query, tuple(params))
+        return self.cursor.fetchall()
 
     def get_chat_message(self, chat_id: int, message_id: int):
         self.cursor.execute("SELECT * FROM chat_messages WHERE chat_id = %s AND message_id = %s", (chat_id, message_id))

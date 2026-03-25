@@ -61,12 +61,7 @@
 </div>
 
 <script>
-  const rows = [
-    {tracker:'Иванова М.', student:'Петров А.', stream:'15.7', tariff:'VIP', week:3, avg:1.2, pause:12, init:42, link:'https://t.me/c/123/21'},
-    {tracker:'Иванова М.', student:'Сидоров К.', stream:'15.8', tariff:'PRO', week:3, avg:3.5, pause:480, init:28, link:'https://t.me/c/123/22'},
-    {tracker:'Петрова А.', student:'Смирнова Е.', stream:'15.8', tariff:'VIP', week:1, avg:8.5, pause:540, init:10, link:'https://t.me/c/123/23'},
-    {tracker:'Смирнова Е.', student:'Кузнецов В.', stream:'15.9', tariff:'PRO', week:5, avg:0.5, pause:40, init:45, link:'https://t.me/c/123/24'}
-  ];
+  const rows = {TRACKER_PERSONAL_DATA_JSON};
   const $ = i => document.getElementById(i);
   const stAvg=v=>v<3?'g':(v<=5?'y':'r');
   const stPause=v=>v<360?'g':(v<=540?'y':'r');
