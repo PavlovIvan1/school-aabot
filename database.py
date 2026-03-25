@@ -23,6 +23,12 @@ class MySQL:
             is_deleted BOOLEAN DEFAULT FALSE
         )""")
 
+        # Добавляем колонку is_deleted если её нет (для существующих таблиц)
+        try:
+            self.cursor.execute("ALTER TABLE trackers_messages ADD COLUMN is_deleted BOOLEAN DEFAULT FALSE")
+        except:
+            pass  # Колонка уже существует
+
         self.cursor.execute("""CREATE TABLE IF NOT EXISTS psychologist_messages (
             message_id INTEGER AUTO_INCREMENT PRIMARY KEY,
             tg_id BIGINT,
@@ -36,6 +42,11 @@ class MySQL:
             is_deleted BOOLEAN DEFAULT FALSE
         )""")
 
+        try:
+            self.cursor.execute("ALTER TABLE psychologist_messages ADD COLUMN is_deleted BOOLEAN DEFAULT FALSE")
+        except:
+            pass
+
         self.cursor.execute("""CREATE TABLE IF NOT EXISTS support_messages (
             message_id INTEGER AUTO_INCREMENT PRIMARY KEY,
             tg_id BIGINT,
@@ -48,6 +59,11 @@ class MySQL:
             message_link TEXT,
             is_deleted BOOLEAN DEFAULT FALSE
         )""")
+
+        try:
+            self.cursor.execute("ALTER TABLE support_messages ADD COLUMN is_deleted BOOLEAN DEFAULT FALSE")
+        except:
+            pass
 
         self.database.commit()
 
