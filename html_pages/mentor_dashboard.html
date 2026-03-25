@@ -49,6 +49,42 @@
       .kpis { grid-template-columns: repeat(2, minmax(150px, 1fr)); }
       .grid-2 { grid-template-columns: 1fr; }
     }
+
+    @media (max-width: 768px) {
+      .wrap { padding: 10px; }
+      .panel { padding: 10px; border-radius: 8px; }
+      h1 { font-size: 16px; }
+      .filters { grid-template-columns: 1fr; gap: 6px; }
+      .filters select, .filters button { height: 36px; font-size: 14px; }
+      .kpis { grid-template-columns: 1fr; gap: 8px; }
+
+      table, thead, tbody, th, td, tr { display: block; }
+      thead { display: none; }
+      tbody tr {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        margin-bottom: 8px;
+        padding: 6px;
+        background: #262626;
+      }
+      td {
+        border: none;
+        border-bottom: 1px dashed var(--line);
+        padding: 7px 8px 7px 44%;
+        position: relative;
+        min-height: 30px;
+      }
+      td:last-child { border-bottom: none; }
+      td::before {
+        content: attr(data-label);
+        position: absolute;
+        left: 8px;
+        width: 40%;
+        color: var(--muted);
+        font-size: 11px;
+        text-transform: uppercase;
+      }
+    }
   </style>
 </head>
 <body>
@@ -73,7 +109,7 @@
       <table>
         <thead>
           <tr>
-            <th>Чат</th><th>Ментор</th><th>Поток</th><th>Неделя</th><th>⏱️ Ср. ответ</th><th>⏸️ Макс. пауза</th><th>💬 Инициативность</th><th>👥 Активность</th><th>Статус</th>
+            <th>Чат</th><th>Ментор</th><th>Поток</th><th>Неделя</th><th>Ср. ответ</th><th>Макс. пауза</th><th>Инициативность</th><th>Активность</th><th>Статус</th>
           </tr>
         </thead>
         <tbody id="rows"></tbody>
@@ -108,8 +144,29 @@
     const statusPause = v => v < 30 ? 'g' : (v <= 60 ? 'y' : 'r');
     const statusInit = v => v > 30 ? 'g' : (v >= 20 ? 'y' : 'r');
     const statusStudent = v => v > 1 ? 'g' : (v >= 0.5 ? 'y' : 'r');
-    const txt = c => c==='g'?'🟢':(c==='y'?'🟡':'🔴');
+    const txt = c => c==='g'?'Норма':(c==='y'?'Внимание':'Риск');
     const overall = r => [statusAvg(r.avg), statusPause(r.pause), statusInit(r.init), statusStudent(r.student)].includes('r') ? 'r' : ([statusAvg(r.avg), statusPause(r.pause), statusInit(r.init), statusStudent(r.student)].includes('y') ? 'y' : 'g');
+
+    function metricByDate(rows, fn){
+      const grouped = {};
+      rows.forEach(r => {
+        const d = r.date || r.start || '';
+        if (!d) return;
+        if (!grouped[d]) grouped[d] = [];
+        grouped[d].push(r);
+      });
+      const dates = Object.keys(grouped).sort();
+      if (dates.length < 2) return null;
+      const cur = fn(grouped[dates[dates.length - 1]]);
+      const prev = fn(grouped[dates[dates.length - 2]]);
+      return cur - prev;
+    }
+
+    function trendText(delta, suffix=''){
+      if (delta === null || Number.isNaN(delta)) return 'нет сравнения';
+      const sign = delta >= 0 ? '+' : '';
+      return `${sign}${delta.toFixed(1)}${suffix}`;
+    }
 
     function uniq(arr, key){ return ['Все', ...new Set(arr.map(i=>i[key]))]; }
 
@@ -145,11 +202,19 @@
       const p = avg(rows,'pause');
       const i = avg(rows,'init');
       const np = rows.length ? Math.round(rows.filter(r=>r.pause < 30).length / rows.length * 100) : 0;
+      const deltaAvg = metricByDate(rows, arr => avg(arr,'avg'));
+      const deltaPause = metricByDate(rows, arr => avg(arr,'pause'));
+      const deltaInit = metricByDate(rows, arr => avg(arr,'init'));
+      const deltaShare = metricByDate(rows, arr => {
+        if (!arr.length) return 0;
+        return arr.filter(r => r.pause < 30).length / arr.length * 100;
+      });
+
       const cards = [
-        {t:'Среднее время ответа (в рабочих часах)', v:`${a.toFixed(1)} ч`, c:statusAvg(a), d:'▲ +0.3 за неделю'},
-        {t:'Средняя макс. пауза в раб. время (минуты)', v:`${Math.round(p)} мин`, c:statusPause(p), d:'▼ +8 мин за неделю'},
-        {t:'Средняя инициативность (%)', v:`${Math.round(i)}%`, c:statusInit(i), d:'▲ +5% за неделю'},
-        {t: rows.length===1 ? 'Макс. пауза сегодня' : 'Доля чатов без длит. пауз', v: rows.length===1 ? `${Math.round(p)} мин` : `${np}%`, c: rows.length===1 ? statusPause(p) : (np>70?'g':(np>=50?'y':'r')), d:'▼ -3% за неделю'}
+        {t:'Среднее время ответа (в рабочих часах)', v:`${a.toFixed(1)} ч`, c:statusAvg(a), d:trendText(deltaAvg, ' ч')},
+        {t:'Средняя макс. пауза в раб. время (минуты)', v:`${Math.round(p)} мин`, c:statusPause(p), d:trendText(deltaPause, ' мин')},
+        {t:'Средняя инициативность (%)', v:`${Math.round(i)}%`, c:statusInit(i), d:trendText(deltaInit, '%')},
+        {t: rows.length===1 ? 'Макс. пауза сегодня' : 'Доля чатов без длит. пауз', v: rows.length===1 ? `${Math.round(p)} мин` : `${np}%`, c: rows.length===1 ? statusPause(p) : (np>70?'g':(np>=50?'y':'r')), d:trendText(deltaShare, '%')}
       ];
       $('kpis').innerHTML = cards.map(c => `<div class="kpi"><div class="t">${c.t}</div><div class="v"><span class="badge ${c.c}"></span>${c.v}</div><div class="d">${c.d}</div></div>`).join('');
     }
@@ -157,12 +222,15 @@
     function renderTable(rows){
       $('rows').innerHTML = rows.map((r, idx) => `
         <tr class="row" data-idx="${idx}">
-          <td>${r.chat}</td><td>${r.mentor}</td><td>${r.stream}</td><td>${r.week}</td>
-          <td>${txt(statusAvg(r.avg))} ${r.avg.toFixed(1)} ч</td>
-          <td>${txt(statusPause(r.pause))} ${Math.round(r.pause)}</td>
-          <td>${txt(statusInit(r.init))} ${Math.round(r.init)}%</td>
-          <td>${txt(statusStudent(r.student))} ${r.student.toFixed(1)}</td>
-          <td>${txt(overall(r))}</td>
+          <td data-label="Чат">${r.chat}</td>
+          <td data-label="Ментор">${r.mentor}</td>
+          <td data-label="Поток">${r.stream}</td>
+          <td data-label="Неделя">${r.week}</td>
+          <td data-label="Ср. ответ">${r.avg.toFixed(1)} ч (${txt(statusAvg(r.avg))})</td>
+          <td data-label="Макс. пауза">${Math.round(r.pause)} мин (${txt(statusPause(r.pause))})</td>
+          <td data-label="Инициативность">${Math.round(r.init)}% (${txt(statusInit(r.init))})</td>
+          <td data-label="Активность">${r.student.toFixed(1)} (${txt(statusStudent(r.student))})</td>
+          <td data-label="Статус">${txt(overall(r))}</td>
         </tr>
       `).join('');
       [...document.querySelectorAll('tr.row')].forEach((el, idx) => el.onclick = () => renderDetail(rows[idx]));
@@ -183,12 +251,12 @@
     function renderProblems(rows){
       const items = [];
       rows.forEach(r=>{
-        if(statusAvg(r.avg)==='r') items.push({p:'🔴 Время ответа > 5 ч', r, v:`${r.avg.toFixed(1)} ч`, n:'< 3 ч', a:'Написать'});
-        if(statusPause(r.pause)==='r') items.push({p:'🔴 Макс. пауза > 60 мин', r, v:`${Math.round(r.pause)} мин`, n:'< 30 мин', a:'Написать'});
-        if(statusInit(r.init)==='r') items.push({p:'🔴 Инициативность < 20%', r, v:`${Math.round(r.init)}%`, n:'> 30%', a:'Написать'});
-        if(statusStudent(r.student)==='y' || statusStudent(r.student)==='r') items.push({p:'🟡 Активность учеников низкая', r, v:`${r.student.toFixed(1)}`, n:'> 1.0', a:'Посмотреть'});
+        if(statusAvg(r.avg)==='r') items.push({p:'Время ответа выше порога', r, v:`${r.avg.toFixed(1)} ч`, n:'< 3 ч', a:'Написать'});
+        if(statusPause(r.pause)==='r') items.push({p:'Макс. пауза выше порога', r, v:`${Math.round(r.pause)} мин`, n:'< 30 мин', a:'Написать'});
+        if(statusInit(r.init)==='r') items.push({p:'Низкая инициативность', r, v:`${Math.round(r.init)}%`, n:'> 30%', a:'Написать'});
+        if(statusStudent(r.student)==='y' || statusStudent(r.student)==='r') items.push({p:'Низкая активность учеников', r, v:`${r.student.toFixed(1)}`, n:'> 1.0', a:'Посмотреть'});
       });
-      $('problems').innerHTML = items.map(i=>`<tr><td>${i.p}</td><td>${i.r.chat}</td><td>${i.r.mentor}</td><td>${i.r.stream}</td><td>${i.v}</td><td>${i.n}</td><td><a class="action" href="${i.r.link}" target="_blank">${i.a}</a></td></tr>`).join('') || '<tr><td colspan="7" class="sub">Проблемных зон за выбранный период не найдено</td></tr>';
+      $('problems').innerHTML = items.map(i=>`<tr><td data-label="Проблема">${i.p}</td><td data-label="Группа">${i.r.chat}</td><td data-label="Ментор">${i.r.mentor}</td><td data-label="Поток">${i.r.stream}</td><td data-label="Значение">${i.v}</td><td data-label="Норма">${i.n}</td><td data-label="Действие"><a class="action" href="${i.r.link}" target="_blank">${i.a}</a></td></tr>`).join('') || '<tr><td data-label="Статус" colspan="7" class="sub">Проблемных зон за выбранный период не найдено</td></tr>';
     }
 
     function renderStars(rows){
@@ -197,9 +265,9 @@
       const init = [...rows].sort((a,b)=>b.init-a.init)[0];
       const pause = [...rows].sort((a,b)=>a.pause-b.pause)[0];
       $('stars').innerHTML = `
-        <div class="chip">⭐ Самый быстрый ответ: <b>${fast.mentor}</b> (${fast.avg.toFixed(1)} ч) — <a class="action" href="${fast.link}" target="_blank">🔗</a></div>
-        <div class="chip">⭐ Самая высокая инициативность: <b>${init.mentor}</b> (${Math.round(init.init)}%) — <a class="action" href="${init.link}" target="_blank">🔗</a></div>
-        <div class="chip">⭐ Ноль длинных пауз: <b>${pause.mentor}</b> (макс. ${Math.round(pause.pause)} мин) — <a class="action" href="${pause.link}" target="_blank">🔗</a></div>
+        <div class="chip">Лучший по скорости ответа: <b>${fast.mentor}</b> (${fast.avg.toFixed(1)} ч) — <a class="action" href="${fast.link}" target="_blank">Ссылка</a></div>
+        <div class="chip">Лучший по инициативности: <b>${init.mentor}</b> (${Math.round(init.init)}%) — <a class="action" href="${init.link}" target="_blank">Ссылка</a></div>
+        <div class="chip">Лучший по паузам: <b>${pause.mentor}</b> (макс. ${Math.round(pause.pause)} мин) — <a class="action" href="${pause.link}" target="_blank">Ссылка</a></div>
       `;
     }
 

@@ -24,6 +24,16 @@
     .chip{background:#2b2b2b;border:1px solid var(--line);border-radius:8px;padding:7px 8px;margin-bottom:6px;font-size:12px}
     .action{color:#d5d5d5;text-decoration:none;border:1px solid var(--line);border-radius:6px;padding:2px 6px}.action:hover{background:#313131}
     @media(max-width:1100px){.filters{grid-template-columns:repeat(2,minmax(120px,1fr))}.kpis{grid-template-columns:repeat(2,minmax(160px,1fr))}.grid{grid-template-columns:1fr}}
+    @media(max-width:768px){
+      .wrap{padding:10px}.panel{padding:10px;border-radius:8px}h1{font-size:16px}
+      .filters{grid-template-columns:1fr;gap:6px}select,button{height:36px;font-size:14px}
+      .kpis{grid-template-columns:1fr;gap:8px}
+      table, thead, tbody, th, td, tr{display:block} thead{display:none}
+      tbody tr{border:1px solid var(--line);border-radius:8px;margin-bottom:8px;padding:6px;background:#262626}
+      td{border:none;border-bottom:1px dashed var(--line);padding:7px 8px 7px 44%;position:relative;min-height:30px}
+      td:last-child{border-bottom:none}
+      td::before{content:attr(data-label);position:absolute;left:8px;width:40%;color:var(--muted);font-size:11px;text-transform:uppercase}
+    }
   </style>
 </head>
 <body>
@@ -44,7 +54,7 @@
 
   <div class="panel">
     <table>
-      <thead><tr><th>Трекер</th><th>Ученик</th><th>Поток</th><th>Группа</th><th>Неделя</th><th>⏱️ Ср. ответ</th><th>⏸️ Макс. пауза</th><th>💬 Инициативность</th><th>Статус</th></tr></thead>
+      <thead><tr><th>Трекер</th><th>Ученик</th><th>Поток</th><th>Группа</th><th>Неделя</th><th>Ср. ответ</th><th>Макс. пауза</th><th>Инициативность</th><th>Статус</th></tr></thead>
       <tbody id="rows"></tbody>
     </table>
   </div>
@@ -66,8 +76,22 @@
   const stAvg=v=>v<3?'g':(v<=5?'y':'r');
   const stPause=v=>v<360?'g':(v<=540?'y':'r');
   const stInit=v=>v>30?'g':(v>=20?'y':'r');
-  const em=s=>s==='g'?'🟢':(s==='y'?'🟡':'🔴');
+  const em=s=>s==='g'?'Норма':(s==='y'?'Внимание':'Риск');
   const overall=r=>[stAvg(r.avg),stPause(r.pause),stInit(r.init)].includes('r')?'r':([stAvg(r.avg),stPause(r.pause),stInit(r.init)].includes('y')?'y':'g');
+
+  function metricByDate(ds, fn){
+    const grouped={};
+    ds.forEach(r=>{ const d=r.date||''; if(!d) return; if(!grouped[d]) grouped[d]=[]; grouped[d].push(r); });
+    const dates=Object.keys(grouped).sort();
+    if(dates.length<2) return null;
+    return fn(grouped[dates[dates.length-1]]) - fn(grouped[dates[dates.length-2]]);
+  }
+
+  function trendText(delta, suffix=''){
+    if(delta===null || Number.isNaN(delta)) return 'нет сравнения';
+    const sign=delta>=0?'+':'';
+    return `${sign}${delta.toFixed(1)}${suffix}`;
+  }
 
   function initFilters(){
     $('stream').innerHTML=['Все',...new Set(rows.map(r=>r.stream))].map(v=>`<option>${v}</option>`).join('');
@@ -80,29 +104,34 @@
   function mean(arr,key){return arr.length?arr.reduce((s,x)=>s+x[key],0)/arr.length:0}
   function renderKpis(ds){
     const a=mean(ds,'avg'), p=mean(ds,'pause'), active=Math.round(ds.filter(i=>i.avg>0).length/Math.max(ds.length,1)*100), fast=Math.round(ds.filter(i=>i.avg<3).length/Math.max(ds.length,1)*100);
+    const dAvg=metricByDate(ds, a=>mean(a,'avg'));
+    const dPause=metricByDate(ds, a=>mean(a,'pause'));
+    const dActive=metricByDate(ds, a=>a.length? a.filter(i=>i.avg>0).length/a.length*100 : 0);
+    const dFast=metricByDate(ds, a=>a.length? a.filter(i=>i.avg<3).length/a.length*100 : 0);
+
     const cards=[
-      ['Среднее время ответа (в рабочих часах)',`${a.toFixed(1)} ч`,stAvg(a),'▼ -0.2 за нед'],
-      ['Средняя макс. пауза в раб. время (минуты)',`${Math.round(p)} мин`,stPause(p),'▲ +5 за нед'],
-      ['Доля чатов с активностью',`${active}%`,active>80?'g':(active>=60?'y':'r'),'▼ -3% за нед'],
-      ['% учеников с ответом <3 ч',`${fast}%`,fast>80?'g':(fast>=60?'y':'r'),'▲ +2% за нед']
+      ['Среднее время ответа (в рабочих часах)',`${a.toFixed(1)} ч`,stAvg(a),trendText(dAvg,' ч')],
+      ['Средняя макс. пауза в раб. время (минуты)',`${Math.round(p)} мин`,stPause(p),trendText(dPause,' мин')],
+      ['Доля чатов с активностью',`${active}%`,active>80?'g':(active>=60?'y':'r'),trendText(dActive,'%')],
+      ['% учеников с ответом <3 ч',`${fast}%`,fast>80?'g':(fast>=60?'y':'r'),trendText(dFast,'%')]
     ];
     $('kpis').innerHTML=cards.map(c=>`<div class="kpi"><div class="t">${c[0]}</div><div class="v"><span class="dot ${c[2]}"></span>${c[1]}</div><div class="sub">${c[3]}</div></div>`).join('');
   }
   function renderTable(ds){
-    $('rows').innerHTML=ds.map((r,i)=>`<tr class="row" data-i="${i}"><td>${r.tracker}</td><td>${r.student}</td><td>${r.stream}</td><td>${r.tariff}</td><td>${r.week}</td><td>${em(stAvg(r.avg))} ${r.avg.toFixed(1)}</td><td>${em(stPause(r.pause))} ${Math.round(r.pause)}</td><td>${em(stInit(r.init))} ${Math.round(r.init)}%</td><td>${em(overall(r))}</td></tr>`).join('');
+    $('rows').innerHTML=ds.map((r,i)=>`<tr class="row" data-i="${i}"><td data-label="Трекер">${r.tracker}</td><td data-label="Ученик">${r.student}</td><td data-label="Поток">${r.stream}</td><td data-label="Группа">${r.tariff}</td><td data-label="Неделя">${r.week}</td><td data-label="Ср. ответ">${r.avg.toFixed(1)} ч (${em(stAvg(r.avg))})</td><td data-label="Макс. пауза">${Math.round(r.pause)} мин (${em(stPause(r.pause))})</td><td data-label="Инициативность">${Math.round(r.init)}% (${em(stInit(r.init))})</td><td data-label="Статус">${em(overall(r))}</td></tr>`).join('');
     [...document.querySelectorAll('tr.row')].forEach((el,i)=>el.onclick=()=>renderDetail(ds[i]));
   }
   function renderDetail(r){
     $('detail').innerHTML=`<div class="chip"><b>Трекер:</b> ${r.tracker}</div><div class="chip"><b>Ученик:</b> ${r.student}</div><div class="chip"><b>Поток:</b> ${r.stream}</div><div class="chip"><b>Тариф:</b> ${r.tariff}</div><div class="chip"><b>Неделя:</b> ${r.week}</div><div class="chip"><a class="action" target="_blank" href="${r.link}">Открыть чат</a></div><div class="chip">Графики динамики за 8 недель — место для интеграции данных</div>`;
   }
   function renderProblems(ds){
-    const p=[]; ds.forEach(r=>{ if(stAvg(r.avg)==='r') p.push(['🔴 Время ответа > 5 ч',r,`${r.avg.toFixed(1)} ч`,'<3 ч']); if(stPause(r.pause)==='r') p.push(['🔴 Макс. пауза > 540',r,`${Math.round(r.pause)}`,'<360']); if(stInit(r.init)==='r') p.push(['🔴 Инициативность < 20%',r,`${Math.round(r.init)}%`,'>30%']); });
-    $('problems').innerHTML=p.map(i=>`<tr><td>${i[0]}</td><td>${i[1].tracker}</td><td>${i[1].student}</td><td>${i[1].stream}</td><td>${i[2]}</td><td>${i[3]}</td></tr>`).join('')||'<tr><td colspan="6" class="sub">Красных сигналов нет</td></tr>';
+    const p=[]; ds.forEach(r=>{ if(stAvg(r.avg)==='r') p.push(['Время ответа выше порога',r,`${r.avg.toFixed(1)} ч`,'<3 ч']); if(stPause(r.pause)==='r') p.push(['Макс. пауза выше порога',r,`${Math.round(r.pause)}`,'<360']); if(stInit(r.init)==='r') p.push(['Низкая инициативность',r,`${Math.round(r.init)}%`,'>30%']); });
+    $('problems').innerHTML=p.map(i=>`<tr><td data-label="Проблема">${i[0]}</td><td data-label="Трекер">${i[1].tracker}</td><td data-label="Ученик">${i[1].student}</td><td data-label="Поток">${i[1].stream}</td><td data-label="Значение">${i[2]}</td><td data-label="Норма">${i[3]}</td></tr>`).join('')||'<tr><td data-label="Статус" colspan="6" class="sub">Красных сигналов нет</td></tr>';
   }
   function renderStars(ds){
     if(!ds.length){$('stars').innerHTML='<div class="sub">Нет данных</div>';return;}
     const fastest=[...ds].sort((a,b)=>a.avg-b.avg)[0], initiative=[...ds].sort((a,b)=>b.init-a.init)[0];
-    $('stars').innerHTML=`<div class="chip">⭐ Самый быстрый ответ: <b>${fastest.tracker}</b> / ${fastest.student} (${fastest.avg.toFixed(1)} ч) <a class="action" href="${fastest.link}" target="_blank">🔗</a></div><div class="chip">⭐ Самая высокая инициативность: <b>${initiative.tracker}</b> / ${initiative.student} (${Math.round(initiative.init)}%) <a class="action" href="${initiative.link}" target="_blank">🔗</a></div>`;
+    $('stars').innerHTML=`<div class="chip">Лучший по скорости ответа: <b>${fastest.tracker}</b> / ${fastest.student} (${fastest.avg.toFixed(1)} ч) <a class="action" href="${fastest.link}" target="_blank">Ссылка</a></div><div class="chip">Лучший по инициативности: <b>${initiative.tracker}</b> / ${initiative.student} (${Math.round(initiative.init)}%) <a class="action" href="${initiative.link}" target="_blank">Ссылка</a></div>`;
   }
   function refresh(){ const ds=filtered(); renderKpis(ds); renderTable(ds); renderProblems(ds); renderStars(ds); $('detail').innerHTML='<span class="sub">Нажмите на строку чата</span>'; }
   initFilters(); $('apply').addEventListener('click', refresh); refresh();
