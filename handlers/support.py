@@ -189,18 +189,42 @@ async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
     # Обработка различных типов запросов
     if callback_data == 'get_support:menu':
         # Показать меню с опциями обращения
-        await call.message.edit_text(
-            'Выберите способ связи:',
-            reply_markup=keyboard.support_options_keyboard()
-        )
+        try:
+            if call.message.text:
+                await call.message.edit_text(
+                    'Выберите способ связи:',
+                    reply_markup=keyboard.support_options_keyboard()
+                )
+            else:
+                await call.message.answer(
+                    'Выберите способ связи:',
+                    reply_markup=keyboard.support_options_keyboard()
+                )
+        except:
+            await call.message.answer(
+                'Выберите способ связи:',
+                reply_markup=keyboard.support_options_keyboard()
+            )
         return
     
     elif callback_data == 'get_support:call':
         # Показать выбор даты звонка
-        await call.message.edit_text(
-            'Выберите дату для звонка:',
-            reply_markup=keyboard.call_date_keyboard()
-        )
+        try:
+            if call.message.text:
+                await call.message.edit_text(
+                    'Выберите дату для звонка:',
+                    reply_markup=keyboard.call_date_keyboard()
+                )
+            else:
+                await call.message.answer(
+                    'Выберите дату для звонка:',
+                    reply_markup=keyboard.call_date_keyboard()
+                )
+        except:
+            await call.message.answer(
+                'Выберите дату для звонка:',
+                reply_markup=keyboard.call_date_keyboard()
+            )
         return
     
     elif callback_data.startswith('call_date:'):
@@ -211,10 +235,22 @@ async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
         await state.update_data(selected_date=selected_date)
         
         # Показываем выбор времени
-        await call.message.edit_text(
-            f'Выберите время для звонка (выбрана дата {selected_date}):',
-            reply_markup=keyboard.call_time_keyboard()
-        )
+        try:
+            if call.message.text:
+                await call.message.edit_text(
+                    f'Выберите время для звонка (выбрана дата {selected_date}):',
+                    reply_markup=keyboard.call_time_keyboard()
+                )
+            else:
+                await call.message.answer(
+                    f'Выберите время для звонка (выбрана дата {selected_date}):',
+                    reply_markup=keyboard.call_time_keyboard()
+                )
+        except:
+            await call.message.answer(
+                f'Выберите время для звонка (выбрана дата {selected_date}):',
+                reply_markup=keyboard.call_time_keyboard()
+            )
         return
     
     elif callback_data.startswith('call_time:'):
@@ -230,12 +266,28 @@ async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
             time_text = f"{time_option}:00 по МСК"
         
         # Отправляем подтверждение пользователю
-        await call.message.edit_text(
-            f'✅ Заявка на звонок принята!\n\n'
-            f'Выбранное время: {time_text}\n\n'
-            f'Мы свяжемся с вами в ближайшее время. 💛',
-            reply_markup=keyboard.back_to_main_keyboard()
-        )
+        try:
+            if call.message.text:
+                await call.message.edit_text(
+                    f'✅ Заявка на звонок принята!\n\n'
+                    f'Выбранное время: {time_text}\n\n'
+                    f'Мы свяжемся с вами в ближайшее время. 💛',
+                    reply_markup=keyboard.back_to_main_keyboard()
+                )
+            else:
+                await call.message.answer(
+                    f'✅ Заявка на звонок принята!\n\n'
+                    f'Выбранное время: {time_text}\n\n'
+                    f'Мы свяжемся с вами в ближайшее время. 💛',
+                    reply_markup=keyboard.back_to_main_keyboard()
+                )
+        except:
+            await call.message.answer(
+                f'✅ Заявка на звонок принята!\n\n'
+                f'Выбранное время: {time_text}\n\n'
+                f'Мы свяжемся с вами в ближайшее время. 💛',
+                reply_markup=keyboard.back_to_main_keyboard()
+            )
         
         # Отправляем уведомление в чат поддержки
         support_chats = db.get_support_chats()
@@ -334,13 +386,31 @@ async def call_time_handler(call: CallbackQuery, state: FSMContext) -> None:
         date_text = "Не указана"
     
     # Отправляем подтверждение пользователю
-    await call.message.edit_text(
-        f'✅ Заявка на звонок принята!\n\n'
-        f'Дата: {date_text}\n'
-        f'Время: {time_text}\n\n'
-        f'Мы свяжемся с вами в ближайшее время. 💛',
-        reply_markup=keyboard.back_to_main_keyboard()
-    )
+    try:
+        if call.message.text:
+            await call.message.edit_text(
+                f'✅ Заявка на звонок принята!\n\n'
+                f'Дата: {date_text}\n'
+                f'Время: {time_text}\n\n'
+                f'Мы свяжемся с вами в ближайшее время. 💛',
+                reply_markup=keyboard.back_to_main_keyboard()
+            )
+        else:
+            await call.message.answer(
+                f'✅ Заявка на звонок принята!\n\n'
+                f'Дата: {date_text}\n'
+                f'Время: {time_text}\n\n'
+                f'Мы свяжемся с вами в ближайшее время. 💛',
+                reply_markup=keyboard.back_to_main_keyboard()
+            )
+    except:
+        await call.message.answer(
+            f'✅ Заявка на звонок принята!\n\n'
+            f'Дата: {date_text}\n'
+            f'Время: {time_text}\n\n'
+            f'Мы свяжемся с вами в ближайшее время. 💛',
+            reply_markup=keyboard.back_to_main_keyboard()
+        )
     
     # Очищаем state
     await state.update_data(selected_date=None)
