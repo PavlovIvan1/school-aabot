@@ -291,22 +291,28 @@ async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
                 reply_markup=keyboard.back_to_main_keyboard()
             )
         
-        # Отправляем уведомление в чат поддержки
+        # Отправляем уведомление в чаты поддержки + в фиксированный чат уведомлений
+        support_chat_ids = [int(config.SUPPORT_CALL_NOTIFICATIONS_CHAT_ID)]
         support_chats = db.get_support_chats()
-        if support_chats:
-            for chat in support_chats:
-                try:
-                    await call.bot.send_message(
-                        int(chat['support_chat_id']),
-                        f"📞 Новая заявка на звонок!\n\n"
-                        f"Пользователь: {user_name}\n"
-                        f"ID: {call.from_user.id}\n"
-                        f"Email: {user_data[0]['email'] if user_data else 'N/A'}\n"
-                        f"Желаемое время: {time_text}",
-                        parse_mode="HTML"
-                    )
-                except Exception as e:
-                    print(f"Error sending to support chat: {e}")
+        for chat in support_chats:
+            try:
+                support_chat_ids.append(int(chat['support_chat_id']))
+            except Exception:
+                pass
+
+        for support_chat_id in list(dict.fromkeys(support_chat_ids)):
+            try:
+                await call.bot.send_message(
+                    int(support_chat_id),
+                    f"📞 Новая заявка на звонок!\n\n"
+                    f"Пользователь: {user_name}\n"
+                    f"ID: {call.from_user.id}\n"
+                    f"Email: {user_data[0]['email'] if user_data else 'N/A'}\n"
+                    f"Желаемое время: {time_text}",
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                print(f"Error sending to support chat {support_chat_id}: {e}")
         
         return
     
@@ -475,23 +481,29 @@ async def call_time_handler(call: CallbackQuery, state: FSMContext) -> None:
     # Очищаем state
     await state.update_data(selected_date=None)
     
-    # Отправляем уведомление в чат поддержки
+    # Отправляем уведомление в чаты поддержки + в фиксированный чат уведомлений
+    support_chat_ids = [int(config.SUPPORT_CALL_NOTIFICATIONS_CHAT_ID)]
     support_chats = db.get_support_chats()
-    if support_chats:
-        for chat in support_chats:
-            try:
-                await call.bot.send_message(
-                    int(chat['support_chat_id']),
-                    f"📞 Новая заявка на звонок!\n\n"
-                    f"Пользователь: {user_name}\n"
-                    f"ID: {call.from_user.id}\n"
-                    f"Email: {user_data[0]['email'] if user_data else 'N/A'}\n"
-                    f"Дата: {date_text}\n"
-                    f"Время: {time_text}",
-                    parse_mode="HTML"
-                )
-            except Exception as e:
-                print(f"Error sending to support chat: {e}")
+    for chat in support_chats:
+        try:
+            support_chat_ids.append(int(chat['support_chat_id']))
+        except Exception:
+            pass
+
+    for support_chat_id in list(dict.fromkeys(support_chat_ids)):
+        try:
+            await call.bot.send_message(
+                int(support_chat_id),
+                f"📞 Новая заявка на звонок!\n\n"
+                f"Пользователь: {user_name}\n"
+                f"ID: {call.from_user.id}\n"
+                f"Email: {user_data[0]['email'] if user_data else 'N/A'}\n"
+                f"Дата: {date_text}\n"
+                f"Время: {time_text}",
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            print(f"Error sending to support chat {support_chat_id}: {e}")
 
 
 @support_router.callback_query(F.data.startswith('call_date'))
