@@ -1284,18 +1284,24 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                     # Отправляем фото в поддержку (с фолбэком по нескольким chat_id)
                     delivered = False
                     for candidate_chat_id in support_chat_candidates:
-                        try:
-                            await bot.send_photo(
-                                int(candidate_chat_id),
-                                photo=BufferedInputFile(image_bytes, filename="image.jpg"),
-                                caption=caption,
-                                reply_markup=keyboard.web_app_support_chat_keyboard(user_id)
-                            )
-                            support_chat_id = int(candidate_chat_id)
-                            delivered = True
+                        for attempt in range(3):
+                            try:
+                                await bot.send_photo(
+                                    int(candidate_chat_id),
+                                    photo=BufferedInputFile(image_bytes, filename="image.jpg"),
+                                    caption=caption,
+                                    reply_markup=keyboard.web_app_support_chat_keyboard(user_id)
+                                )
+                                support_chat_id = int(candidate_chat_id)
+                                delivered = True
+                                break
+                            except Exception as send_error:
+                                print(f"Ошибка отправки фото в чат поддержки {candidate_chat_id}, попытка {attempt + 1}/3: {send_error}")
+                                if attempt < 2:
+                                    await asyncio.sleep(15)
+
+                        if delivered:
                             break
-                        except Exception as send_error:
-                            print(f"Ошибка отправки фото в чат поддержки {candidate_chat_id}: {send_error}")
 
                     if not delivered:
                         await websocket.send_json({
@@ -1327,13 +1333,19 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
 
                 delivered = False
                 for candidate_chat_id in support_chat_candidates:
-                    try:
-                        await bot.send_message(int(candidate_chat_id), f'🆕 Новое сообщение от пользователя {tg_name} @{tg_username} ({user_data[0]["email"].lower()} Поток: {users_flow}) в Web версии (Техническая информация: {user_id})\n\n{text}', reply_markup=keyboard.web_app_support_chat_keyboard(user_id))
-                        support_chat_id = int(candidate_chat_id)
-                        delivered = True
+                    for attempt in range(3):
+                        try:
+                            await bot.send_message(int(candidate_chat_id), f'🆕 Новое сообщение от пользователя {tg_name} @{tg_username} ({user_data[0]["email"].lower()} Поток: {users_flow}) в Web версии (Техническая информация: {user_id})\n\n{text}', reply_markup=keyboard.web_app_support_chat_keyboard(user_id))
+                            support_chat_id = int(candidate_chat_id)
+                            delivered = True
+                            break
+                        except Exception as e:
+                            print(f"Ошибка при отправке сообщения в поддержку {user_id} в чат {candidate_chat_id}, попытка {attempt + 1}/3: {e}")
+                            if attempt < 2:
+                                await asyncio.sleep(15)
+
+                    if delivered:
                         break
-                    except Exception as e:
-                        print(f"Ошибка при отправке сообщения в поддержку {user_id} в чат {candidate_chat_id}: {e}")
 
                 if not delivered:
                     await websocket.send_json({

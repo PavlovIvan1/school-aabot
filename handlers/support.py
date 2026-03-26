@@ -121,6 +121,51 @@ support_router.message.middleware(SecondSubMiddleware())
 
 class SupportChat(StatesGroup):
     message = State()
+    call_phone = State()
+
+
+def _available_call_dates() -> list[str]:
+    """Возвращает доступные даты (YYYY-MM-DD), где есть хотя бы один свободный слот 11/13/16."""
+    now_utc = datetime.datetime.utcnow()
+    moscow_time = now_utc + datetime.timedelta(hours=3)
+
+    available = []
+    for i in range(10):
+        date_obj = moscow_time + datetime.timedelta(days=i)
+        date_str = date_obj.strftime('%Y-%m-%d')
+
+        has_free_fixed_slot = (
+            not db.is_support_call_slot_busy(date_str, '11:00 по МСК')
+            or not db.is_support_call_slot_busy(date_str, '13:00 по МСК')
+            or not db.is_support_call_slot_busy(date_str, '16:00 по МСК')
+        )
+
+        if has_free_fixed_slot:
+            available.append(date_str)
+
+    return available
+
+
+def _available_call_time_options(selected_date: str) -> list[str]:
+    """Возвращает доступные опции времени для даты: 11/13/16 + asap (если свободны)."""
+    options = []
+
+    if not db.is_support_call_slot_busy(selected_date, '11:00 по МСК'):
+        options.append('11')
+    if not db.is_support_call_slot_busy(selected_date, '13:00 по МСК'):
+        options.append('13')
+    if not db.is_support_call_slot_busy(selected_date, '16:00 по МСК'):
+        options.append('16')
+
+    # Оставляем "как можно скорее" всегда как резервный вариант
+    options.append('asap')
+
+    return options
+
+
+def _is_valid_phone(phone: str) -> bool:
+    digits = ''.join(ch for ch in phone if ch.isdigit())
+    return 10 <= len(digits) <= 15
 
 
 async def edit_message(message: Message, text: str, reply_markup=None, parse_mode=None) -> Message:
@@ -211,27 +256,50 @@ async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
     
     elif callback_data == 'get_support:call':
         # Показать выбор даты звонка
+        available_dates = _available_call_dates()
+
+        if len(available_dates) == 0:
+            try:
+                if call.message.text:
+                    await call.message.edit_text(
+                        '⛔ На ближайшие 10 дней свободных дат для созвона нет. Пожалуйста, попробуйте позже.',
+                        reply_markup=keyboard.support_options_keyboard()
+                    )
+                else:
+                    await call.message.answer(
+                        '⛔ На ближайшие 10 дней свободных дат для созвона нет. Пожалуйста, попробуйте позже.',
+                        reply_markup=keyboard.support_options_keyboard()
+                    )
+            except:
+                await call.message.answer(
+                    '⛔ На ближайшие 10 дней свободных дат для созвона нет. Пожалуйста, попробуйте позже.',
+                    reply_markup=keyboard.support_options_keyboard()
+                )
+            return
+
         try:
             if call.message.text:
                 await call.message.edit_text(
                     'Выберите дату для звонка:',
-                    reply_markup=keyboard.call_date_keyboard()
+                    reply_markup=keyboard.call_date_keyboard(available_dates)
                 )
             else:
                 await call.message.answer(
                     'Выберите дату для звонка:',
-                    reply_markup=keyboard.call_date_keyboard()
+                    reply_markup=keyboard.call_date_keyboard(available_dates)
                 )
         except:
             await call.message.answer(
                 'Выберите дату для звонка:',
-                reply_markup=keyboard.call_date_keyboard()
+                reply_markup=keyboard.call_date_keyboard(available_dates)
             )
         return
     
     elif callback_data.startswith('call_date:'):
         # Обработка выбора даты - показать выбор времени
         selected_date = callback_data.split(':')[1]
+
+        available_time_options = _available_call_time_options(selected_date)
         
         # Сохраняем выбранную дату в state
         await state.update_data(selected_date=selected_date)
@@ -241,23 +309,25 @@ async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
             if call.message.text:
                 await call.message.edit_text(
                     f'Выберите время для звонка (выбрана дата {selected_date}):',
-                    reply_markup=keyboard.call_time_keyboard()
+                    reply_markup=keyboard.call_time_keyboard(available_time_options)
                 )
             else:
                 await call.message.answer(
                     f'Выберите время для звонка (выбрана дата {selected_date}):',
-                    reply_markup=keyboard.call_time_keyboard()
+                    reply_markup=keyboard.call_time_keyboard(available_time_options)
                 )
         except:
             await call.message.answer(
                 f'Выберите время для звонка (выбрана дата {selected_date}):',
-                reply_markup=keyboard.call_time_keyboard()
+                reply_markup=keyboard.call_time_keyboard(available_time_options)
             )
         return
     
     elif callback_data.startswith('call_time:'):
         # Обработка выбора времени звонка
         time_option = callback_data.split(':')[1]
+        state_data = await state.get_data()
+        selected_date = state_data.get('selected_date', 'Не указана')
         
         user_data = db.get_user(call.from_user.id)
         user_name = f"@{call.from_user.username}" if call.from_user.username else f"ID: {call.from_user.id}"
@@ -266,6 +336,56 @@ async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
             time_text = "Как можно скорее"
         else:
             time_text = f"{time_option}:00 по МСК"
+
+        # Повторная проверка занятости для фиксированного времени
+        if time_option != 'asap' and selected_date not in (None, '', 'Не указана'):
+            if db.is_support_call_slot_busy(selected_date, time_text):
+                available_time_options = _available_call_time_options(selected_date)
+                try:
+                    if call.message.text:
+                        await call.message.edit_text(
+                            f'⛔ На {selected_date} в {time_text} уже есть запись.\n\nВыберите другое время:',
+                            reply_markup=keyboard.call_time_keyboard(available_time_options)
+                        )
+                    else:
+                        await call.message.answer(
+                            f'⛔ На {selected_date} в {time_text} уже есть запись.\n\nВыберите другое время:',
+                            reply_markup=keyboard.call_time_keyboard(available_time_options)
+                        )
+                except:
+                    await call.message.answer(
+                        f'⛔ На {selected_date} в {time_text} уже есть запись.\n\nВыберите другое время:',
+                        reply_markup=keyboard.call_time_keyboard(available_time_options)
+                    )
+                return
+
+        await state.update_data(selected_date=selected_date, call_time_option=time_option, call_time_text=time_text)
+        await state.set_state(SupportChat.call_phone)
+
+        try:
+            if call.message.text:
+                await call.message.edit_text(
+                    f'📞 Укажите номер телефона для созвона.\n\n'
+                    f'Дата: {selected_date}\n'
+                    f'Время: {time_text}\n\n'
+                    f'Пример: +79991234567'
+                )
+            else:
+                await call.message.answer(
+                    f'📞 Укажите номер телефона для созвона.\n\n'
+                    f'Дата: {selected_date}\n'
+                    f'Время: {time_text}\n\n'
+                    f'Пример: +79991234567'
+                )
+        except:
+            await call.message.answer(
+                f'📞 Укажите номер телефона для созвона.\n\n'
+                f'Дата: {selected_date}\n'
+                f'Время: {time_text}\n\n'
+                f'Пример: +79991234567'
+            )
+
+        return
         
         # Отправляем подтверждение пользователю
         try:
@@ -385,24 +505,25 @@ async def call_time_handler(call: CallbackQuery, state: FSMContext) -> None:
     # Проверка занятости слота (для фиксированного времени)
     if time_option != 'asap' and selected_date not in (None, '', 'Не указана'):
         if db.is_support_call_slot_busy(selected_date, time_text):
+            available_time_options = _available_call_time_options(selected_date)
             try:
                 if call.message.text:
                     await call.message.edit_text(
                         f'⛔ На {selected_date} в {time_text} уже есть запись.\n\n'
                         f'Выберите другое время:',
-                        reply_markup=keyboard.call_time_keyboard()
+                        reply_markup=keyboard.call_time_keyboard(available_time_options)
                     )
                 else:
                     await call.message.answer(
                         f'⛔ На {selected_date} в {time_text} уже есть запись.\n\n'
                         f'Выберите другое время:',
-                        reply_markup=keyboard.call_time_keyboard()
+                        reply_markup=keyboard.call_time_keyboard(available_time_options)
                     )
             except:
                 await call.message.answer(
                     f'⛔ На {selected_date} в {time_text} уже есть запись.\n\n'
                     f'Выберите другое время:',
-                    reply_markup=keyboard.call_time_keyboard()
+                    reply_markup=keyboard.call_time_keyboard(available_time_options)
                 )
             return
     
@@ -430,24 +551,25 @@ async def call_time_handler(call: CallbackQuery, state: FSMContext) -> None:
             )
         except Exception:
             # Защита от гонки: если заняли слот между проверкой и записью
+            available_time_options = _available_call_time_options(selected_date)
             try:
                 if call.message.text:
                     await call.message.edit_text(
                         f'⛔ На {selected_date} в {time_text} уже есть запись.\n\n'
                         f'Выберите другое время:',
-                        reply_markup=keyboard.call_time_keyboard()
+                        reply_markup=keyboard.call_time_keyboard(available_time_options)
                     )
                 else:
                     await call.message.answer(
                         f'⛔ На {selected_date} в {time_text} уже есть запись.\n\n'
                         f'Выберите другое время:',
-                        reply_markup=keyboard.call_time_keyboard()
+                        reply_markup=keyboard.call_time_keyboard(available_time_options)
                     )
             except:
                 await call.message.answer(
                     f'⛔ На {selected_date} в {time_text} уже есть запись.\n\n'
                     f'Выберите другое время:',
-                    reply_markup=keyboard.call_time_keyboard()
+                    reply_markup=keyboard.call_time_keyboard(available_time_options)
                 )
             return
     
@@ -514,22 +636,105 @@ async def call_date_handler(call: CallbackQuery, state: FSMContext) -> None:
     selected_date = call.data.split(':')[1]
     await state.update_data(selected_date=selected_date)
 
+    available_time_options = _available_call_time_options(selected_date)
+
     try:
         if call.message.text:
             await call.message.edit_text(
                 f'Выберите время для звонка (выбрана дата {selected_date}):',
-                reply_markup=keyboard.call_time_keyboard()
+                reply_markup=keyboard.call_time_keyboard(available_time_options)
             )
         else:
             await call.message.answer(
                 f'Выберите время для звонка (выбрана дата {selected_date}):',
-                reply_markup=keyboard.call_time_keyboard()
+                reply_markup=keyboard.call_time_keyboard(available_time_options)
             )
     except:
         await call.message.answer(
             f'Выберите время для звонка (выбрана дата {selected_date}):',
-            reply_markup=keyboard.call_time_keyboard()
+            reply_markup=keyboard.call_time_keyboard(available_time_options)
         )
+
+
+@support_router.message(StateFilter(SupportChat.call_phone))
+async def call_phone_handler(message: Message, state: FSMContext) -> None:
+    phone = (message.text or '').strip()
+
+    if not _is_valid_phone(phone):
+        await message.answer('⛔ Некорректный номер телефона.\nВведите номер в формате +79991234567')
+        return
+
+    state_data = await state.get_data()
+    selected_date = state_data.get('selected_date', 'Не указана')
+    time_option = state_data.get('call_time_option', 'asap')
+    time_text = state_data.get('call_time_text', 'Как можно скорее')
+
+    user_data = db.get_user(message.from_user.id)
+    user_name = f"@{message.from_user.username}" if message.from_user.username else f"ID: {message.from_user.id}"
+
+    # Финальная защита от гонки по слоту
+    if time_option != 'asap' and selected_date not in (None, '', 'Не указана'):
+        if db.is_support_call_slot_busy(selected_date, time_text):
+            available_time_options = _available_call_time_options(selected_date)
+            await state.set_state(None)
+            await message.answer(
+                f'⛔ На {selected_date} в {time_text} уже есть запись.\n\nВыберите другое время:',
+                reply_markup=keyboard.call_time_keyboard(available_time_options)
+            )
+            return
+
+        db.add_support_call_request(
+            message.from_user.id,
+            user_data[0]['email'] if user_data else None,
+            selected_date,
+            time_text
+        )
+
+    # Формат даты для текста
+    date_text = selected_date
+    if selected_date not in (None, '', 'Не указана'):
+        try:
+            date_obj = datetime.datetime.strptime(selected_date, '%Y-%m-%d')
+            month_names = {1: 'января', 2: 'февраля', 3: 'марта', 4: 'апреля', 5: 'мая', 6: 'июня',
+                          7: 'июля', 8: 'августа', 9: 'сентября', 10: 'октября', 11: 'ноября', 12: 'декабря'}
+            date_text = f"{date_obj.day} {month_names[date_obj.month]}"
+        except:
+            pass
+
+    await message.answer(
+        f'✅ Заявка на звонок принята!\n\n'
+        f'Дата: {date_text}\n'
+        f'Время: {time_text}\n'
+        f'Телефон: {phone}\n\n'
+        f'Мы свяжемся с вами в ближайшее время. 💛',
+        reply_markup=keyboard.back_to_main_keyboard()
+    )
+
+    support_chat_ids = [int(config.SUPPORT_CALL_NOTIFICATIONS_CHAT_ID)]
+    support_chats = db.get_support_chats()
+    for chat in support_chats:
+        try:
+            support_chat_ids.append(int(chat['support_chat_id']))
+        except Exception:
+            pass
+
+    for support_chat_id in list(dict.fromkeys(support_chat_ids)):
+        try:
+            await message.bot.send_message(
+                int(support_chat_id),
+                f"📞 Новая заявка на звонок!\n\n"
+                f"Пользователь: {user_name}\n"
+                f"ID: {message.from_user.id}\n"
+                f"Email: {user_data[0]['email'] if user_data else 'N/A'}\n"
+                f"Дата: {date_text}\n"
+                f"Время: {time_text}\n"
+                f"Телефон: {phone}",
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            print(f"Error sending to support chat {support_chat_id}: {e}")
+
+    await state.clear()
 
 
 @support_router.message(StateFilter(SupportChat.message))

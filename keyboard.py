@@ -160,20 +160,28 @@ def support_options_keyboard() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def call_time_keyboard() -> InlineKeyboardMarkup:
+def call_time_keyboard(available_options=None) -> InlineKeyboardMarkup:
     """Клавиатура выбора времени звонка"""
     builder = InlineKeyboardBuilder()
-    
-    builder.row(InlineKeyboardButton(text="11:00", callback_data="call_time:11"))
-    builder.row(InlineKeyboardButton(text="13:00", callback_data="call_time:13"))
-    builder.row(InlineKeyboardButton(text="16:00", callback_data="call_time:16"))
-    builder.row(InlineKeyboardButton(text="Как можно скорее", callback_data="call_time:asap"))
+
+    if available_options is None:
+        available_options = ["11", "13", "16", "asap"]
+
+    if "11" in available_options:
+        builder.row(InlineKeyboardButton(text="11:00", callback_data="call_time:11"))
+    if "13" in available_options:
+        builder.row(InlineKeyboardButton(text="13:00", callback_data="call_time:13"))
+    if "16" in available_options:
+        builder.row(InlineKeyboardButton(text="16:00", callback_data="call_time:16"))
+    if "asap" in available_options:
+        builder.row(InlineKeyboardButton(text="Как можно скорее", callback_data="call_time:asap"))
+
     builder.row(InlineKeyboardButton(text="🔙 Назад", callback_data="get_support:menu"))
 
     return builder.as_markup()
 
 
-def call_date_keyboard() -> InlineKeyboardMarkup:
+def call_date_keyboard(available_dates=None) -> InlineKeyboardMarkup:
     """Клавиатура выбора даты звонка (на 10 дней вперёд)"""
     import datetime
     
@@ -187,7 +195,8 @@ def call_date_keyboard() -> InlineKeyboardMarkup:
     dates = []
     for i in range(10):
         next_date = moscow_time + datetime.timedelta(days=i)
-        dates.append(next_date)
+        if available_dates is None or next_date.strftime('%Y-%m-%d') in available_dates:
+            dates.append(next_date)
     
     # Создаём кнопки по 5 в ряд
     row = []
