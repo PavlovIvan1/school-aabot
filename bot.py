@@ -338,7 +338,10 @@ async def handle_alice_request(request: Request):
         if len(user_data) == 0:
             return HTMLResponse(content="<html><body><h1>Ученик не найден в базе. Возможно, ученик ещё не написал боту /start</h1></body></html>", status_code=404)
         
-        user_flow = db.get_flow_by_email(user_data[0]['email'])
+        try:
+            user_flow = db.get_flow_by_email(user_data[0]['email'])
+        except Exception:
+            user_flow = "—"
 
         try:
             tg_data = await bot.get_chat(user_id)
@@ -402,8 +405,8 @@ async def handle_alice_request(request: Request):
         </head>
         <body>
             <div class="error-box">
-                <h1>На обучении есть психолог, который разберет каждый твой запрос, если будешь сталкиваться со сложностями во время обучения.</h1>
-                <p>Отправь сообщение, чтобы психолог связался с тобой</p>
+                <h1>Не удалось открыть чат с трекером.</h1>
+                <p>Попробуйте открыть чат ещё раз или обратитесь в поддержку.</p>
             </div>
         </body>
         </html>
@@ -473,8 +476,8 @@ async def handle_alice_request(request: Request):
         </head>
         <body>
             <div class="error-box">
-                <h1>На обучении есть психолог, который разберет каждый твой запрос, если будешь сталкиваться со сложностями во время обучения.</h1>
-                <p>Отправь сообщение, чтобы психолог связался с тобой</p>
+                <h1>Не удалось открыть чат с трекером.</h1>
+                <p>Попробуйте открыть чат ещё раз или обратитесь в поддержку.</p>
             </div>
         </body>
         </html>
@@ -492,10 +495,45 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
         config.ws_connections[user_id].append(websocket)
 
     user_data = db.get_user(int(user_id))
-    users_flow = db.get_flow_by_email(user_data[0]['email'])
-    tracker_chat_id = config.USERS_ADDITIONAL_INFO[
-        user_data[0]["email"].lower()
-    ]["tracker_chat_id"]
+    if len(user_data) == 0:
+        await websocket.send_json({
+            "type": "error",
+            "message": "Пользователь не найден в базе данных"
+        })
+        await websocket.close()
+        return
+
+    user_email = (user_data[0].get("email") or "").lower()
+
+    try:
+        users_flow = db.get_flow_by_email(user_email)
+    except Exception:
+        users_flow = "—"
+
+    tracker_chat_candidates = []
+
+    tracker_chat_from_config = config.USERS_ADDITIONAL_INFO.get(user_email, {}).get("tracker_chat_id")
+    if tracker_chat_from_config is not None and str(tracker_chat_from_config).lstrip('-').isdigit():
+        tracker_chat_candidates.append(int(tracker_chat_from_config))
+
+    try:
+        tracker_chat_from_access = db.get_chat_id(user_email)
+        if tracker_chat_from_access is not None and str(tracker_chat_from_access).lstrip('-').isdigit():
+            tracker_chat_candidates.append(int(tracker_chat_from_access))
+    except Exception:
+        pass
+
+    tracker_chat_candidates = list(dict.fromkeys(tracker_chat_candidates))
+
+    if len(tracker_chat_candidates) == 0:
+        await websocket.send_json({
+            "type": "error",
+            "message": "Не найден чат трекера для пользователя. Обратитесь в поддержку."
+        })
+        await websocket.close()
+        return
+
+    tracker_chat_id = tracker_chat_candidates[0]
 
     try:
         while True:
@@ -555,25 +593,39 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                     if text:
                         caption = f'{text}\n\n{user_info}'
                     
-                    # Отправляем фото трекеру с кнопками
-                    msg_photo = await bot.send_photo(
-                        int(tracker_chat_id),
-                        photo=BufferedInputFile(image_bytes, filename="image.jpg"),
-                        caption=caption,
-                        reply_markup=keyboard.web_app_tracker_chat_keyboard(user_id)
-                    )
-                    
+                    # Отправляем фото трекеру (с фолбэком по нескольким chat_id)
+                    delivered = False
+                    for candidate_chat_id in tracker_chat_candidates:
+                        try:
+                            await bot.send_photo(
+                                int(candidate_chat_id),
+                                photo=BufferedInputFile(image_bytes, filename="image.jpg"),
+                                caption=caption,
+                                reply_markup=keyboard.web_app_tracker_chat_keyboard(user_id)
+                            )
+                            tracker_chat_id = int(candidate_chat_id)
+                            delivered = True
+                            break
+                        except Exception as send_error:
+                            print(f"Ошибка отправки фото в чат трекера {candidate_chat_id}: {send_error}")
+
+                    if not delivered:
+                        await websocket.send_json({
+                            "type": "error",
+                            "message": "Сообщение не доставлено трекеру. Попробуйте ещё раз или напишите в поддержку."
+                        })
+                        continue
+
                     # Добавляем image в payload для web с правильным data URL
                     message_payload["image"] = f"data:image/jpeg;base64,{image_base64}"
                 except Exception as e:
                     print(f"Ошибка при отправке фото трекеру: {e}")
-                    # Отправляем ошибку только этому пользователю
                     error_payload = {
                         "type": "error",
                         "message": "Не удалось отправить изображение. Пожалуйста, попробуйте ещё раз или отправьте изображение напрямую в чат с ботом."
                     }
                     await websocket.send_json(error_payload)
-                    return  # Прерываем обработку, не отправляем сообщение
+                    continue
             
             # Если есть текст и нет картинки - отправляем текстовое сообщение
             if text and not image_base64:
@@ -585,10 +637,22 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                     tg_username = "(неизвестно)"
                     tg_name = "Пользователь"
 
-                try:
-                    await bot.send_message(int(tracker_chat_id), f'🆕 Новое сообщение от пользователя {tg_name} @{tg_username} ({user_data[0]["email"].lower()} Поток: {users_flow}) в Web версии (Техническая информация: {user_id})\n\n{text}', reply_markup=keyboard.web_app_tracker_chat_keyboard(user_id))
-                except Exception as e:
-                    print(f"Ошибка при отправке сообщения трекеру {user_id}: {e}")
+                delivered = False
+                for candidate_chat_id in tracker_chat_candidates:
+                    try:
+                        await bot.send_message(int(candidate_chat_id), f'🆕 Новое сообщение от пользователя {tg_name} @{tg_username} ({user_data[0]["email"].lower()} Поток: {users_flow}) в Web версии (Техническая информация: {user_id})\n\n{text}', reply_markup=keyboard.web_app_tracker_chat_keyboard(user_id))
+                        tracker_chat_id = int(candidate_chat_id)
+                        delivered = True
+                        break
+                    except Exception as e:
+                        print(f"Ошибка при отправке сообщения трекеру {user_id} в чат {candidate_chat_id}: {e}")
+
+                if not delivered:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "Сообщение не доставлено трекеру. Попробуйте ещё раз или напишите в поддержку."
+                    })
+                    continue
 
             # отправляем ВСЕМ подключённым (включая отправителя)
             for ws in config.ws_connections[user_id]:
@@ -717,21 +781,53 @@ async def handle_alice_request(request: Request):
     html_messages = ''
 
     for db_user in db_users_list:
-        users_list = db.get_user_by_email(db_user)
+        user = db.get_user_by_email_with_valid_tg_id(db_user)
 
-        for user in users_list:
+        if user is None:
+            users_list = db.get_user_by_email(db_user)
+            if len(users_list) == 0:
+                continue
+
+            # Фолбэк: пробуем восстановить валидный TG ID через username
+            # (если по email попалась запись с пустым/нулевым tg_id).
+            for row in users_list:
+                username = row.get("username")
+                if not username:
+                    continue
+
+                username_users = db.get_user_by_username(username)
+                for username_user in username_users:
+                    tg_id_candidate = username_user.get("tg_id")
+                    if tg_id_candidate is not None and str(tg_id_candidate).lstrip('-').isdigit() and int(tg_id_candidate) != 0:
+                        user = username_user
+                        break
+
+                if user is not None:
+                    break
+
+            if user is None:
+                user = users_list[0]
+
+        tg_id = user.get("tg_id")
+
+        if tg_id is not None and str(tg_id).isdigit() and int(tg_id) != 0:
             try:
-                tg_data = await bot.get_chat(user["tg_id"])
+                tg_data = await bot.get_chat(int(tg_id))
                 tg_username = tg_data.username if tg_data.username else "(без username)"
                 name = tg_data.first_name if tg_data.first_name else "Пользователь"
             except:
                 tg_username = "Не найден"
                 name = "Не найден"
 
-            user_link = f'https://rb.infinitydev.tw1.su/get_tracker_chat?user_id={user["tg_id"]}'
+            user_link = f'https://rb.infinitydev.tw1.su/get_tracker_chat?user_id={int(tg_id)}'
+            user_link_html = f'<a href="{user_link}" target="_blank">{user_link}</a>'
+        else:
+            tg_username = "Не найден"
+            name = "Не найден"
+            user_link_html = "<span class=\"email\">Нет Telegram ID</span>"
 
-            html_messages += f'''<tr>
-    <td><a href="{user_link}" target="_blank">{user_link}</a></td>
+        html_messages += f'''<tr>
+    <td>{user_link_html}</td>
     <td><span class="email">{user["email"].lower()}</span></td>
     <td><span class="telegram">{name} @{tg_username}</span></td>
 </tr>'''
@@ -1082,8 +1178,50 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
         config.ws_connections_support[user_id].append(websocket)
 
     user_data = db.get_user(int(user_id))
-    users_flow = db.get_flow_by_email(user_data[0]['email'])
-    support_chat_id = user_data[0]['support_chat_id']
+    if len(user_data) == 0:
+        await websocket.send_json({
+            "type": "error",
+            "message": "Пользователь не найден в базе данных"
+        })
+        await websocket.close()
+        return
+
+    user_email = (user_data[0].get("email") or "").lower()
+
+    try:
+        users_flow = db.get_flow_by_email(user_email)
+    except Exception:
+        users_flow = "—"
+
+    support_chat_candidates = []
+
+    user_support_chat = user_data[0].get('support_chat_id')
+    if user_support_chat is not None and str(user_support_chat).lstrip('-').isdigit():
+        support_chat_candidates.append(int(user_support_chat))
+
+    info_support_chat = config.USERS_ADDITIONAL_INFO.get(user_email, {}).get("support_chat_id")
+    if info_support_chat is not None and str(info_support_chat).lstrip('-').isdigit():
+        support_chat_candidates.append(int(info_support_chat))
+
+    try:
+        for support_chat in db.get_support_chats():
+            support_chat_id = support_chat.get("support_chat_id")
+            if support_chat_id is not None and str(support_chat_id).lstrip('-').isdigit():
+                support_chat_candidates.append(int(support_chat_id))
+    except Exception:
+        pass
+
+    support_chat_candidates = list(dict.fromkeys(support_chat_candidates))
+
+    if len(support_chat_candidates) == 0:
+        await websocket.send_json({
+            "type": "error",
+            "message": "Не найден чат поддержки для пользователя. Обратитесь в поддержку."
+        })
+        await websocket.close()
+        return
+
+    support_chat_id = support_chat_candidates[0]
 
     try:
         while True:
@@ -1143,14 +1281,29 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                     if text:
                         caption = f'{text}\n\n{user_info}'
                     
-                    # Отправляем фото в поддержку с кнопками
-                    msg_photo = await bot.send_photo(
-                        int(support_chat_id),
-                        photo=BufferedInputFile(image_bytes, filename="image.jpg"),
-                        caption=caption,
-                        reply_markup=keyboard.web_app_support_chat_keyboard(user_id)
-                    )
-                    
+                    # Отправляем фото в поддержку (с фолбэком по нескольким chat_id)
+                    delivered = False
+                    for candidate_chat_id in support_chat_candidates:
+                        try:
+                            await bot.send_photo(
+                                int(candidate_chat_id),
+                                photo=BufferedInputFile(image_bytes, filename="image.jpg"),
+                                caption=caption,
+                                reply_markup=keyboard.web_app_support_chat_keyboard(user_id)
+                            )
+                            support_chat_id = int(candidate_chat_id)
+                            delivered = True
+                            break
+                        except Exception as send_error:
+                            print(f"Ошибка отправки фото в чат поддержки {candidate_chat_id}: {send_error}")
+
+                    if not delivered:
+                        await websocket.send_json({
+                            "type": "error",
+                            "message": "Сообщение не доставлено в поддержку. Попробуйте ещё раз."
+                        })
+                        continue
+
                     # Добавляем image в payload для web с правильным data URL
                     message_payload["image"] = f"data:image/jpeg;base64,{image_base64}"
                 except Exception as e:
@@ -1160,7 +1313,7 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                         "message": "Не удалось отправить изображение. Пожалуйста, попробуйте ещё раз или отправьте изображение напрямую в чат с ботом."
                     }
                     await websocket.send_json(error_payload)
-                    return
+                    continue
             
             # Если есть текст и нет картинки - отправляем текстовое сообщение
             if text and not image_base64:
@@ -1172,10 +1325,22 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                     tg_username = None
                     tg_name = None
 
-                try:
-                    await bot.send_message(int(support_chat_id), f'🆕 Новое сообщение от пользователя {tg_name} @{tg_username} ({user_data[0]["email"].lower()} Поток: {users_flow}) в Web версии (Техническая информация: {user_id})\n\n{text}', reply_markup=keyboard.web_app_support_chat_keyboard(user_id))
-                except Exception as e:
-                    print(f"Ошибка при отправке сообщения в поддержку {user_id}: {e}")
+                delivered = False
+                for candidate_chat_id in support_chat_candidates:
+                    try:
+                        await bot.send_message(int(candidate_chat_id), f'🆕 Новое сообщение от пользователя {tg_name} @{tg_username} ({user_data[0]["email"].lower()} Поток: {users_flow}) в Web версии (Техническая информация: {user_id})\n\n{text}', reply_markup=keyboard.web_app_support_chat_keyboard(user_id))
+                        support_chat_id = int(candidate_chat_id)
+                        delivered = True
+                        break
+                    except Exception as e:
+                        print(f"Ошибка при отправке сообщения в поддержку {user_id} в чат {candidate_chat_id}: {e}")
+
+                if not delivered:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "Сообщение не доставлено в поддержку. Попробуйте ещё раз."
+                    })
+                    continue
 
             # отправляем ВСЕМ подключённым (включая отправителя)
             for ws in config.ws_connections_support[user_id]:
