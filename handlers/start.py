@@ -260,7 +260,7 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
 
 Чтобы открыть тебе доступ, напиши, пожалуйста, свою электронную почту, которая была указана при покупке обучения. Мы проверим тебя в списке учеников и сразу подключим к материалам 🚀
 
-Напиши свою почту 👇''')
+Напиши свою почту 👇''', reply_markup=keyboard.main_keyboard(include_dashboards=is_staff))
             
             return
         elif len(link_access_data) != 0:
@@ -284,7 +284,7 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
 
 Чтобы открыть тебе доступ, напиши, пожалуйста, свою электронную почту, которая была указана при покупке обучения. Мы проверим тебя в списке учеников и сразу подключим к материалам 🚀
 
-Напиши свою почту 👇''')
+Напиши свою почту 👇''', reply_markup=keyboard.main_keyboard(include_dashboards=is_staff))
             
             await message.bot.send_message(config.LOG_CHAT_ID, f'Не удалось найти информацию по быстрой ссылке: {message.from_user.full_name} @{message.from_user.username} (ID: {message.from_user.id})\nАргументы: {start_args}')
             return
@@ -580,13 +580,15 @@ async def homework_is_done(call: CallbackQuery) -> None:
 
 @start_router.message(GetAccess.email)
 async def command_start_handler(message: Message, state: FSMContext) -> None:
+    is_staff = int(message.from_user.id) in [int(i) for i in config.DASHBOARD_ALLOWED_USER_IDS]
+
     # Prevent email onboarding flow from hijacking messages in group chats
     if message.chat.type != 'private':
         await state.clear()
         return
 
     if not message.text:
-        await message.answer("Пожалуйста, введите email текстовым сообщением")
+        await message.answer("Пожалуйста, введите email текстовым сообщением", reply_markup=keyboard.main_keyboard(include_dashboards=is_staff))
         return
     
     is_access = db.is_email_in_users_access(message.text.lower())
@@ -618,7 +620,7 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
 
 Что делать? 
 1. Проверь правильно ли указана электронная почта и попробуй еще раз
-2. Если уверен(а), что почта указана корректно, то обязательно напиши нам в поддержку http://t.me/stepbybit''')
+2. Если уверен(а), что почта указана корректно, то обязательно напиши нам в поддержку http://t.me/stepbybit''', reply_markup=keyboard.main_keyboard(include_dashboards=is_staff))
         
         try:
             await message.bot.send_message(config.LOG_CHAT_ID, f'Ученик не может авторизоваться: {message.from_user.full_name} @{message.from_user.username} (ID: {message.from_user.id})\nПочта: {message.text.lower()}')
