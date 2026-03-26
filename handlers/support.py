@@ -527,6 +527,34 @@ async def call_time_handler(call: CallbackQuery, state: FSMContext) -> None:
                 )
             return
     
+    # Переходим к шагу ввода телефона (после выбора времени)
+    await state.update_data(selected_date=selected_date, call_time_option=time_option, call_time_text=time_text)
+    await state.set_state(SupportChat.call_phone)
+
+    try:
+        if call.message.text:
+            await call.message.edit_text(
+                f'📞 Укажите номер телефона для созвона.\n\n'
+                f'Дата: {selected_date}\n'
+                f'Время: {time_text}\n\n'
+                f'Пример: +79991234567'
+            )
+        else:
+            await call.message.answer(
+                f'📞 Укажите номер телефона для созвона.\n\n'
+                f'Дата: {selected_date}\n'
+                f'Время: {time_text}\n\n'
+                f'Пример: +79991234567'
+            )
+    except:
+        await call.message.answer(
+            f'📞 Укажите номер телефона для созвона.\n\n'
+            f'Дата: {selected_date}\n'
+            f'Время: {time_text}\n\n'
+            f'Пример: +79991234567'
+        )
+    return
+
     # Форматируем дату для отображения
     if selected_date != 'Не указана':
         try:
