@@ -375,6 +375,30 @@ async def call_time_handler(call: CallbackQuery, state: FSMContext) -> None:
         time_text = "Как можно скорее"
     else:
         time_text = f"{time_option}:00 по МСК"
+
+    # Проверка занятости слота (для фиксированного времени)
+    if time_option != 'asap' and selected_date not in (None, '', 'Не указана'):
+        if db.is_support_call_slot_busy(selected_date, time_text):
+            try:
+                if call.message.text:
+                    await call.message.edit_text(
+                        f'⛔ На {selected_date} в {time_text} уже есть запись.\n\n'
+                        f'Выберите другое время:',
+                        reply_markup=keyboard.call_time_keyboard()
+                    )
+                else:
+                    await call.message.answer(
+                        f'⛔ На {selected_date} в {time_text} уже есть запись.\n\n'
+                        f'Выберите другое время:',
+                        reply_markup=keyboard.call_time_keyboard()
+                    )
+            except:
+                await call.message.answer(
+                    f'⛔ На {selected_date} в {time_text} уже есть запись.\n\n'
+                    f'Выберите другое время:',
+                    reply_markup=keyboard.call_time_keyboard()
+                )
+            return
     
     # Форматируем дату для отображения
     if selected_date != 'Не указана':
@@ -388,6 +412,38 @@ async def call_time_handler(call: CallbackQuery, state: FSMContext) -> None:
             date_text = selected_date
     else:
         date_text = "Не указана"
+
+    # Сохраняем слот в БД (для фиксированного времени)
+    if time_option != 'asap' and selected_date not in (None, '', 'Не указана'):
+        try:
+            db.add_support_call_request(
+                call.from_user.id,
+                user_data[0]['email'] if user_data else None,
+                selected_date,
+                time_text
+            )
+        except Exception:
+            # Защита от гонки: если заняли слот между проверкой и записью
+            try:
+                if call.message.text:
+                    await call.message.edit_text(
+                        f'⛔ На {selected_date} в {time_text} уже есть запись.\n\n'
+                        f'Выберите другое время:',
+                        reply_markup=keyboard.call_time_keyboard()
+                    )
+                else:
+                    await call.message.answer(
+                        f'⛔ На {selected_date} в {time_text} уже есть запись.\n\n'
+                        f'Выберите другое время:',
+                        reply_markup=keyboard.call_time_keyboard()
+                    )
+            except:
+                await call.message.answer(
+                    f'⛔ На {selected_date} в {time_text} уже есть запись.\n\n'
+                    f'Выберите другое время:',
+                    reply_markup=keyboard.call_time_keyboard()
+                )
+            return
     
     # Отправляем подтверждение пользователю
     try:

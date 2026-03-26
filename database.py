@@ -107,6 +107,17 @@ class MySQL:
             UNIQUE KEY uniq_tracker_personal_daily (metric_date, tracker_id, student_tg_id)
         )""")
 
+        # Заявки на звонки в поддержку (слоты времени)
+        self.cursor.execute("""CREATE TABLE IF NOT EXISTS support_call_requests (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            tg_id BIGINT NOT NULL,
+            email VARCHAR(255),
+            request_date DATE NOT NULL,
+            request_time VARCHAR(32) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY uniq_support_call_slot (request_date, request_time)
+        )""")
+
         self.database.commit()
 
 
@@ -691,6 +702,23 @@ class MySQL:
         query += " ORDER BY metric_date DESC, tracker_id ASC, student_tg_id ASC"
         self.cursor.execute(query, tuple(params))
         return self.cursor.fetchall()
+
+    def is_support_call_slot_busy(self, request_date, request_time):
+        self.cursor.execute(
+            "SELECT id FROM support_call_requests WHERE request_date = %s AND request_time = %s LIMIT 1",
+            (request_date, request_time)
+        )
+        return self.cursor.fetchone() is not None
+
+    def add_support_call_request(self, tg_id, email, request_date, request_time):
+        self.cursor.execute(
+            """
+            INSERT INTO support_call_requests (tg_id, email, request_date, request_time)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (tg_id, email, request_date, request_time)
+        )
+        self.database.commit()
 
     def get_chat_message(self, chat_id: int, message_id: int):
         self.cursor.execute("SELECT * FROM chat_messages WHERE chat_id = %s AND message_id = %s", (chat_id, message_id))

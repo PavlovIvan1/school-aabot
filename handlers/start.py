@@ -238,7 +238,7 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
     is_support_chat = message.chat.id in support_chat_ids
     is_tracker_user = str(message.from_user.id) in [str(i) for i in config.MANUAL_TRACKER_USER_IDS]
 
-    is_staff = is_tracker_chat or is_support_chat or is_tracker_user
+    is_staff = int(message.from_user.id) in [int(i) for i in config.DASHBOARD_ALLOWED_USER_IDS]
 
     user_data = db.get_user(message.from_user.id)
 
@@ -305,7 +305,7 @@ async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
     is_support_chat = call.message.chat.id in support_chat_ids
     is_tracker_user = str(call.from_user.id) in [str(i) for i in config.MANUAL_TRACKER_USER_IDS]
 
-    is_staff = is_tracker_chat or is_support_chat or is_tracker_user
+    is_staff = int(call.from_user.id) in [int(i) for i in config.DASHBOARD_ALLOWED_USER_IDS]
 
     try:
         await call.message.delete()
@@ -1164,6 +1164,15 @@ async def send_congratulation_message(message: Message, lesson_id: int, user_id)
     elif float(users_flow) >= 15.6:
         lesson_data = db.get_lesson(str(lesson_id), users_flow)
         await message.bot.send_photo(user_id, photo=FSInputFile(f'files/15_6/{count_required_homework}.jpg'), caption=config.CONGRATULATION_MESSAGE_3.replace("<lesson_name>", lesson_data['name']), parse_mode="HTML")
+
+
+@start_router.message(F.text == '/my_chat_id')
+async def my_chat_id(message: types.Message):
+    await message.answer(
+        f"Ваш user_id: {message.from_user.id}\n"
+        f"Текущий chat_id: {message.chat.id}\n"
+        f"Тип чата: {message.chat.type}"
+    )
 
 
 @start_router.message(F.text.startswith('/flapper'))
