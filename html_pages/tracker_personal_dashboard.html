@@ -43,7 +43,7 @@
     <h1>Личные чаты «Трекер — Ученик»</h1>
     <div class="sub">Рабочее время: Пн–Пт, 10:00–19:00</div>
     <div class="filters">
-      <select id="period"><option>Сегодня</option><option selected>Неделя</option><option>Месяц</option><option>Произвольный</option></select>
+      <select id="period"><option>Период: Сегодня</option><option selected>Период: 7 дней</option><option>Период: 30 дней</option><option>Период: Всё время</option></select>
       <select id="stream"></select>
       <select id="tracker"></select>
       <select id="week"></select>
@@ -104,13 +104,47 @@
     return `${sign}${delta.toFixed(1)}${suffix}`;
   }
 
+  function parseDateSafe(v){
+    if(!v) return null;
+    const d = new Date(v);
+    if(Number.isNaN(d.getTime())) return null;
+    return d;
+  }
+
+  function isInSelectedPeriod(r){
+    const period = $('period').value;
+    const d = parseDateSafe(r.date);
+    if(!d) return true;
+
+    const now = new Date();
+    const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    if(period === 'Период: Сегодня') return d >= startToday;
+    if(period === 'Период: 7 дней'){
+      const from = new Date(startToday);
+      from.setDate(from.getDate() - 6);
+      return d >= from;
+    }
+    if(period === 'Период: 30 дней'){
+      const from = new Date(startToday);
+      from.setDate(from.getDate() - 29);
+      return d >= from;
+    }
+    return true;
+  }
+
   function initFilters(){
-    $('stream').innerHTML=['Все',...new Set(rows.map(r=>r.stream))].map(v=>`<option>${v}</option>`).join('');
-    $('tracker').innerHTML=['Все',...new Set(rows.map(r=>r.tracker))].map(v=>`<option>${v}</option>`).join('');
-    $('week').innerHTML=['Все',1,2,3,4,5,6,7,8].map(v=>`<option>${v}</option>`).join('');
+    $('stream').innerHTML=['Все',...new Set(rows.map(r=>r.stream))].map(v=>`<option value="${v}">${v==='Все'?'Поток: Все':`Поток: ${v}`}</option>`).join('');
+    $('tracker').innerHTML=['Все',...new Set(rows.map(r=>r.tracker))].map(v=>`<option value="${v}">${v==='Все'?'Трекер: Все':`Трекер: ${v}`}</option>`).join('');
+    $('week').innerHTML=['Все',1,2,3,4,5,6,7,8].map(v=>`<option value="${v}">${v==='Все'?'Неделя: Все':`Неделя: ${v}`}</option>`).join('');
   }
   function filtered(){
-    return rows.filter(r=>($('stream').value==='Все'||r.stream===$('stream').value)&&($('tracker').value==='Все'||r.tracker===$('tracker').value)&&($('week').value==='Все'||String(r.week)===$('week').value));
+    return rows.filter(r=>
+      isInSelectedPeriod(r) &&
+      ($('stream').value==='Все'||r.stream===$('stream').value) &&
+      ($('tracker').value==='Все'||r.tracker===$('tracker').value) &&
+      ($('week').value==='Все'||String(r.week)===$('week').value)
+    );
   }
   function mean(arr,key){return arr.length?arr.reduce((s,x)=>s+x[key],0)/arr.length:0}
   function renderKpis(ds){

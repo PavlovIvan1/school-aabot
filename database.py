@@ -536,6 +536,10 @@ class MySQL:
     def get_link_access_by_user_id(self, user_id: str):
         self.cursor.execute("SELECT * FROM link_access WHERE user_id = %s", (user_id,))
         return self.cursor.fetchall()
+
+    def get_link_access_by_email(self, email: str):
+        self.cursor.execute("SELECT * FROM link_access WHERE email = %s", (email,))
+        return self.cursor.fetchall()
     
     def is_mentor(self, mentor_id: int):
         for i in config.SHEETS_DATA["mentors"]:

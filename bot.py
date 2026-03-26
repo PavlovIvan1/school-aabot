@@ -336,6 +336,16 @@ async def handle_alice_request(request: Request):
         user_data = db.get_user(user_id_int)
 
         if len(user_data) == 0:
+            # Фолбэк: восстанавливаем пользователя из link_access по user_id
+            link_access_rows = db.get_link_access_by_user_id(str(user_id_int))
+            if len(link_access_rows) != 0 and link_access_rows[0].get("email"):
+                try:
+                    db.add_user(user_id_int, link_access_rows[0]["email"].lower())
+                    user_data = db.get_user(user_id_int)
+                except Exception:
+                    pass
+
+        if len(user_data) == 0:
             return HTMLResponse(content="<html><body><h1>Ученик не найден в базе. Возможно, ученик ещё не написал боту /start</h1></body></html>", status_code=404)
         
         try:
@@ -786,7 +796,29 @@ async def handle_alice_request(request: Request):
         if user is None:
             users_list = db.get_user_by_email(db_user)
             if len(users_list) == 0:
-                continue
+                # Фолбэк: берём user_id из link_access по email, чтобы не терять ученика в списке
+                link_access_rows = db.get_link_access_by_email(db_user)
+                recovered_user_id = None
+
+                for row in link_access_rows:
+                    candidate_id = row.get("user_id")
+                    if candidate_id is not None and str(candidate_id).lstrip('-').isdigit() and int(candidate_id) != 0:
+                        recovered_user_id = int(candidate_id)
+                        break
+
+                if recovered_user_id is None:
+                    continue
+
+                try:
+                    db.add_user(recovered_user_id, db_user.lower())
+                except Exception:
+                    pass
+
+                users_list = db.get_user_by_email(db_user)
+                if len(users_list) == 0:
+                    user = {"tg_id": recovered_user_id, "email": db_user.lower()}
+                else:
+                    user = users_list[0]
 
             # Фолбэк: пробуем восстановить валидный TG ID через username
             # (если по email попалась запись с пустым/нулевым tg_id).
@@ -845,7 +877,14 @@ async def mentor_dashboard_page():
     dashboard_data = []
 
     # 1) Пытаемся взять агрегированные дневные метрики
-    daily_rows = db.get_mentor_dashboard_daily()
+    raw_daily_rows = db.get_mentor_dashboard_daily()
+    daily_rows = [
+        row for row in raw_daily_rows
+        if float(row.get("avg_response_time_hours") or 0) > 0
+        or int(row.get("max_pause_minutes") or 0) > 0
+        or float(row.get("initiative_percent") or 0) > 0
+        or float(row.get("student_activity_per_user") or 0) > 0
+    ]
 
     if len(daily_rows) != 0:
         for row in daily_rows:
@@ -900,7 +939,13 @@ async def tracker_personal_dashboard_page():
     dashboard_data = []
 
     # 1) Пытаемся взять агрегированные дневные метрики
-    daily_rows = db.get_tracker_personal_dashboard_daily()
+    raw_daily_rows = db.get_tracker_personal_dashboard_daily()
+    daily_rows = [
+        row for row in raw_daily_rows
+        if float(row.get("avg_response_time_hours") or 0) > 0
+        or int(row.get("max_pause_minutes") or 0) > 0
+        or float(row.get("initiative_percent") or 0) > 0
+    ]
 
     if len(daily_rows) != 0:
         for row in daily_rows:
