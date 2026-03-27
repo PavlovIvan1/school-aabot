@@ -507,6 +507,10 @@ class MySQL:
         self.cursor.execute("SELECT * FROM trackers_messages WHERE tg_id = %s AND (is_deleted IS NULL OR is_deleted = FALSE) ORDER BY message_id ASC", (tg_id,))
         return self.cursor.fetchall()
 
+    def get_tracker_message_by_id(self, message_id: int):
+        self.cursor.execute("SELECT * FROM trackers_messages WHERE message_id = %s", (message_id,))
+        return self.cursor.fetchone()
+
     def get_tracker_dialog_user_ids(self):
         self.cursor.execute("SELECT DISTINCT tg_id FROM trackers_messages WHERE (is_deleted IS NULL OR is_deleted = FALSE)")
         return [i["tg_id"] for i in self.cursor.fetchall() if i.get("tg_id") is not None]

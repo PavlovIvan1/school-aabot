@@ -42,6 +42,7 @@
   <div class="panel">
     <h1>Личные чаты «Трекер — Ученик»</h1>
     <div class="sub">Рабочее время: Пн–Пт, 10:00–19:00</div>
+    <div class="sub">Нормы KPI: ср. ответ &lt; 3ч, макс. пауза &lt; 360 мин, инициативность &gt; 30%, доля активных чатов &gt; 80%.</div>
     <div class="filters">
       <select id="period"><option>Период: Сегодня</option><option selected>Период: 7 дней</option><option>Период: 30 дней</option><option>Период: Всё время</option></select>
       <select id="stream"></select>
@@ -72,7 +73,7 @@
 
   <div class="panel">
     <h3 style="margin:0 0 8px 0;font-size:14px;">Проблемные зоны</h3>
-    <table><thead><tr><th>Проблема</th><th>Трекер</th><th>Ученик</th><th>Поток</th><th>Знач.</th><th>Норма</th></tr></thead><tbody id="problems"></tbody></table>
+    <table><thead><tr><th>Проблема</th><th>Трекер</th><th>Ученик</th><th>Поток</th><th>Значение показателя</th><th>Норма</th></tr></thead><tbody id="problems"></tbody></table>
     <div id="problemsPagination" style="display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:10px;">
       <button id="prevProblemsPage">Назад</button>
       <span id="problemsPageInfo" class="sub">Страница 1</span>
@@ -135,14 +136,16 @@
 
   function initFilters(){
     $('stream').innerHTML=['Все',...new Set(rows.map(r=>r.stream))].map(v=>`<option value="${v}">${v==='Все'?'Поток: Все':`Поток: ${v}`}</option>`).join('');
-    $('tracker').innerHTML=['Все',...new Set(rows.map(r=>r.tracker))].map(v=>`<option value="${v}">${v==='Все'?'Трекер: Все':`Трекер: ${v}`}</option>`).join('');
+
+    const trackerOptions = ['Все', ...new Set(rows.map(r => `${r.tracker} [ID: ${r.tracker_id ?? '—'}]`))];
+    $('tracker').innerHTML=trackerOptions.map(v=>`<option value="${v}">${v==='Все'?'Трекер: Все':`Трекер: ${v}`}</option>`).join('');
     $('week').innerHTML=['Все',1,2,3,4,5,6,7,8].map(v=>`<option value="${v}">${v==='Все'?'Неделя: Все':`Неделя: ${v}`}</option>`).join('');
   }
   function filtered(){
     return rows.filter(r=>
       isInSelectedPeriod(r) &&
       ($('stream').value==='Все'||r.stream===$('stream').value) &&
-      ($('tracker').value==='Все'||r.tracker===$('tracker').value) &&
+      ($('tracker').value==='Все'||`${r.tracker} [ID: ${r.tracker_id ?? '—'}]`===$('tracker').value) &&
       ($('week').value==='Все'||String(r.week)===$('week').value)
     );
   }

@@ -355,6 +355,7 @@ const chat = document.getElementById("chat");
 const input = document.getElementById("msgInput");
 
 const userId = "{USER_ID}";
+const trackerChatId = "{TRACKER_CHAT_ID}";
 
 /* ---------- SCROLL ---------- */
 
@@ -656,7 +657,7 @@ async function confirmDelete() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message_id: selectedMessageId,
-        user_id: userId
+        actor_chat_id: trackerChatId
       })
     });
     

@@ -317,6 +317,7 @@ const chat = document.getElementById("chat");
 const input = document.getElementById("msgInput");
 
 const userId = "{USER_ID}";
+const canDeleteMessages = false;
 
 /* ---------- SCROLL ---------- */
 
@@ -561,6 +562,7 @@ let longPressTimer = null;
 const LONG_PRESS_DURATION = 500;
 
 function setupMessageDelete() {
+  if (!canDeleteMessages) return;
   const messages = document.querySelectorAll('.message');
   
   messages.forEach(msg => {
@@ -609,6 +611,7 @@ function closeDeletePopup() {
 }
 
 async function confirmDelete() {
+  if (!canDeleteMessages) return;
   if (!selectedMessageId) return;
   
   try {
@@ -637,6 +640,12 @@ async function confirmDelete() {
 }
 
 window.addEventListener('load', () => {
+  if (!canDeleteMessages) {
+    const popup = document.getElementById('deletePopup');
+    if (popup) popup.style.display = 'none';
+    return;
+  }
+
   setupMessageDelete();
   
   const observer = new MutationObserver(() => {
@@ -646,6 +655,7 @@ window.addEventListener('load', () => {
 });
 
 document.getElementById('deletePopup').addEventListener('click', (e) => {
+  if (!canDeleteMessages) return;
   if (e.target.id === 'deletePopup') {
     closeDeletePopup();
   }

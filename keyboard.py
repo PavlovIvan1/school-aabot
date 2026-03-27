@@ -13,6 +13,7 @@ def main_keyboard(include_dashboards=False) -> ReplyKeyboardMarkup:
     if include_dashboards:
         builder.row(InlineKeyboardButton(text="📊 Дашборд менторов", web_app=WebAppInfo(url="https://rb.infinitydev.tw1.su/mentor_dashboard")))
         builder.row(InlineKeyboardButton(text="👤 Дашборд личных чатов", web_app=WebAppInfo(url="https://rb.infinitydev.tw1.su/tracker_personal_dashboard")))
+        builder.row(InlineKeyboardButton(text="🧩 Дашборд ДЗ трекеров", web_app=WebAppInfo(url="https://rb.infinitydev.tw1.su/tracker_homework_dashboard")))
     #builder.row(InlineKeyboardButton(text="ℹ️ Онбординг", callback_data="get_onboarding"))
 
     return builder.as_markup()
@@ -374,5 +375,6 @@ def staff_dashboard_keyboard() -> InlineKeyboardMarkup:
 
     builder.row(InlineKeyboardButton(text="📊 Дашборд менторов", url="https://rb.infinitydev.tw1.su/mentor_dashboard"))
     builder.row(InlineKeyboardButton(text="👤 Личные чаты: трекер-ученик", url="https://rb.infinitydev.tw1.su/tracker_personal_dashboard"))
+    builder.row(InlineKeyboardButton(text="🧩 ДЗ трекеров", url="https://rb.infinitydev.tw1.su/tracker_homework_dashboard"))
 
     return builder.as_markup()
