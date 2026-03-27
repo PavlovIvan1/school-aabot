@@ -1321,6 +1321,96 @@ Chat трекера: {tracker_chat_id}
     await message.answer(info_text)
 
 
+@start_router.message(
+    (F.text.startswith('/fixtracker') | F.text.startswith('/repairtracker'))
+)
+async def fix_tracker_user_by_email(message: types.Message):
+    """
+    Самоисправление проблемного ученика для трекеров.
+    Команда пытается восстановить/синхронизировать tg_id по email
+    (users <-> link_access), чтобы чат трекера снова открывался.
+    """
+    allowed_ids = set(int(i) for i in config.MANUAL_TRACKER_USER_IDS)
+    allowed_ids.add(5201430878)
+
+    tracker_ids = set()
+    try:
+        tracker_ids = set(int(i) for i in db.get_trackers_chats())
+    except Exception:
+        tracker_ids = set()
+
+    if (
+        int(message.from_user.id) not in allowed_ids
+        and int(message.from_user.id) not in tracker_ids
+        and int(message.from_user.id) not in [int(i) for i in config.ADMINS_LIST]
+    ):
+        return
+
+    parts = message.text.split(maxsplit=1)
+    if len(parts) != 2:
+        return await message.answer(
+            "Используйте: /fixtracker email@example.com\n"
+            "или: /repairtracker email@example.com"
+        )
+
+    email = parts[1].strip().lower()
+    if '@' not in email or ' ' in email:
+        return await message.answer("Неверный формат email. Пример: /fixtracker ilona_76@bk.ru")
+
+    users_rows = db.get_user_by_email(email)
+    link_rows = db.get_link_access_by_email(email)
+
+    valid_user_ids = []
+    for row in users_rows:
+        tg_id = row.get('tg_id')
+        if tg_id is not None and str(tg_id).isdigit() and int(tg_id) > 0:
+            valid_user_ids.append(int(tg_id))
+
+    link_user_ids = []
+    for row in link_rows:
+        link_user_id = row.get('user_id')
+        if link_user_id is not None and str(link_user_id).isdigit() and int(link_user_id) > 0:
+            link_user_ids.append(int(link_user_id))
+
+    chosen_tg_id = None
+
+    # Приоритет: уже валидный tg_id в users, иначе берем самый свежий из link_access
+    if len(valid_user_ids) != 0:
+        chosen_tg_id = valid_user_ids[0]
+    elif len(link_user_ids) != 0:
+        chosen_tg_id = link_user_ids[-1]
+
+    if chosen_tg_id is None:
+        return await message.answer(
+            "Не удалось починить автоматически: нет валидного Telegram ID в users/link_access.\n"
+            "Попросите ученика написать боту /start и повторите команду."
+        )
+
+    try:
+        if len(users_rows) == 0:
+            db.add_user(chosen_tg_id, email)
+            action_text = f"Создал запись users: tg_id={chosen_tg_id}"
+        else:
+            db.update_user_tg_id(email, chosen_tg_id)
+            action_text = f"Синхронизировал tg_id в users: {chosen_tg_id}"
+
+        open_link = f"https://rb.infinitydev.tw1.su/get_tracker_chat?user_id={chosen_tg_id}"
+        await message.answer(
+            "✅ Исправление выполнено\n"
+            f"Email: {email}\n"
+            f"{action_text}\n"
+            f"users rows: {len(users_rows)}\n"
+            f"link_access rows: {len(link_rows)}\n"
+            f"Открыть чат: {open_link}"
+        )
+    except Exception as e:
+        await message.answer(
+            "⚠️ Ошибка при исправлении.\n"
+            f"Email: {email}\n"
+            f"Текст ошибки: {e}"
+        )
+
+
 @start_router.message_reaction()
 async def message_reaction_handler(message_reaction: types.MessageReactionUpdated) -> Any:
     support_chats_list = db.get_support_chats()

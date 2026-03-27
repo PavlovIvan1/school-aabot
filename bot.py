@@ -345,6 +345,17 @@ async def handle_alice_request(request: Request):
                 except Exception:
                     pass
 
+        # Авто-ремонт: если запись уже есть, но tg_id у email разъехался,
+        # принудительно синхронизируем email -> текущий user_id из ссылки.
+        if len(user_data) != 0:
+            try:
+                user_email = (user_data[0].get("email") or "").lower().strip()
+                if user_email:
+                    db.update_user_tg_id(user_email, user_id_int)
+                    user_data = db.get_user(user_id_int)
+            except Exception:
+                pass
+
         if len(user_data) == 0:
             return HTMLResponse(content="<html><body><h1>Ученик не найден в базе. Возможно, ученик ещё не написал боту /start</h1></body></html>", status_code=404)
         
@@ -368,30 +379,38 @@ async def handle_alice_request(request: Request):
 
         for message in tracker_messages_list:
             message_from_type = "incoming" if message["from_user"] else "outgoing"
-            message_date = datetime.datetime.fromtimestamp(message["unix_time"]).strftime("%d.%m.%Y %H:%M")
+            message_unix_time = message.get("unix_time")
+            if message_unix_time:
+                message_date = datetime.datetime.fromtimestamp(message_unix_time).strftime("%d.%m.%Y %H:%M")
+            else:
+                message_date = "—"
 
-            html_messages += f'<div class="message {message_from_type}" data-message-id="{message["message_id"]}">{message["message_text"]}'
+            safe_message_text = message.get("message_text") or ""
+            html_messages += f'<div class="message {message_from_type}" data-message-id="{message["message_id"]}">{safe_message_text}'
             
-            if message["file_type"] == "photo":
-                file_info = await bot.get_file(message["file_id"])
-                file_path = f'static/{user_id}.jpg'
-                await bot.download_file(file_info.file_path, file_path)
-                html_messages += f'<img src="{file_path}">'
-            elif message["file_type"] in ["video", "video_note"]:
-                file_info = await bot.get_file(message["file_id"])
-                file_path = f'static/{user_id}.mp4'
-                await bot.download_file(file_info.file_path, file_path)
-                html_messages += f'<video controls><source src="{file_path}" type="video/mp4"></video>'
-            elif message["file_type"] in ["audio", "voice"]:
-                file_info = await bot.get_file(message["file_id"])
-                file_path = f'static/{user_id}.mp3'
-                await bot.download_file(file_info.file_path, file_path)
-                html_messages += f'<audio controls class="audio-player"><source src="{file_path}" type="audio/mpeg"></audio>'
-            elif message["file_type"] == "file":
-                file_info = await bot.get_file(message["file_id"])
-                file_path = f'static/{user_id}.{file_info.file_path.split(".")[-1]}'
-                await bot.download_file(file_info.file_path, file_path)
-                html_messages += f'<div class="file-attach"><div class="file-icon">📎</div><div>{file_path}</div></div>'
+            try:
+                if message["file_type"] == "photo":
+                    file_info = await bot.get_file(message["file_id"])
+                    file_path = f'static/{user_id}.jpg'
+                    await bot.download_file(file_info.file_path, file_path)
+                    html_messages += f'<img src="{file_path}">'
+                elif message["file_type"] in ["video", "video_note"]:
+                    file_info = await bot.get_file(message["file_id"])
+                    file_path = f'static/{user_id}.mp4'
+                    await bot.download_file(file_info.file_path, file_path)
+                    html_messages += f'<video controls><source src="{file_path}" type="video/mp4"></video>'
+                elif message["file_type"] in ["audio", "voice"]:
+                    file_info = await bot.get_file(message["file_id"])
+                    file_path = f'static/{user_id}.mp3'
+                    await bot.download_file(file_info.file_path, file_path)
+                    html_messages += f'<audio controls class="audio-player"><source src="{file_path}" type="audio/mpeg"></audio>'
+                elif message["file_type"] == "file":
+                    file_info = await bot.get_file(message["file_id"])
+                    file_path = f'static/{user_id}.{file_info.file_path.split(".")[-1]}'
+                    await bot.download_file(file_info.file_path, file_path)
+                    html_messages += f'<div class="file-attach"><div class="file-icon">📎</div><div>{file_path}</div></div>'
+            except Exception:
+                html_messages += '<div class="file-attach"><div class="file-icon">⚠️</div><div>Вложение временно недоступно</div></div>'
 
             html_messages += f'<div class="time">{message_date}</div></div>'
 
@@ -439,9 +458,14 @@ async def handle_alice_request(request: Request):
 
         for message in tracker_messages_list:
             message_from_type = "outgoing" if message["from_user"] else "incoming"
-            message_date = datetime.datetime.fromtimestamp(message["unix_time"]).strftime("%d.%m.%Y %H:%M")
+            message_unix_time = message.get("unix_time")
+            if message_unix_time:
+                message_date = datetime.datetime.fromtimestamp(message_unix_time).strftime("%d.%m.%Y %H:%M")
+            else:
+                message_date = "—"
 
-            html_messages += f'<div class="message {message_from_type}" data-message-id="{message["message_id"]}">{message["message_text"]}'
+            safe_message_text = message.get("message_text") or ""
+            html_messages += f'<div class="message {message_from_type}" data-message-id="{message["message_id"]}">{safe_message_text}'
             
             if message["file_type"] == "photo":
                 file_info = await bot.get_file(message["file_id"])
