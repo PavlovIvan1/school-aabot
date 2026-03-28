@@ -910,7 +910,8 @@ async def handle_alice_request(request: Request):
 async def mentor_dashboard_page():
     dashboard_data = []
     try:
-        # 1) Пытаемся взять агрегированные дневные метрики
+        # Только быстрый источник: агрегированные дневные метрики.
+        # Без fallback на тяжёлые запросы, чтобы не блокировать другие web-роуты.
         raw_daily_rows = db.get_mentor_dashboard_daily()
         daily_rows = [
             row for row in raw_daily_rows
@@ -920,44 +921,21 @@ async def mentor_dashboard_page():
             or float(row.get("student_activity_per_user") or 0) > 0
         ]
 
-        if len(daily_rows) != 0:
-            for row in daily_rows:
-                dashboard_data.append({
-                    "chat": f"Чат {row['chat_id']}",
-                    "mentor": row.get("mentor_name") or f"ID {row.get('mentor_id', '')}",
-                    "stream": row.get("stream_id") or "—",
-                    "week": row.get("week_number") or 1,
-                    "start": str(row.get("stream_start_date") or datetime.date.today()),
-                    "students": 0,
-                    "link": f"https://rb.infinitydev.tw1.su/get_tracker_chats_list?chat_id={row['chat_id']}",
-                    "date": str(row.get("metric_date") or datetime.date.today()),
-                    "avg": float(row.get("avg_response_time_hours") or 0),
-                    "pause": int(row.get("max_pause_minutes") or 0),
-                    "init": float(row.get("initiative_percent") or 0),
-                    "student": float(row.get("student_activity_per_user") or 0),
-                })
-        else:
-            # Лёгкий fallback: только агрегированный запрос без тяжёлых переборов по всем сообщениям.
-            engagement_rows = db.get_mentors_engagement()
-            for row in engagement_rows:
-                tracker_data = db.get_mentor_by_id(row["owner_id"])
-                tracker_activity = db.get_mentor_activity(row["chat_id"])
-                tracker_avg = db.get_mentor_avg_response_time(row["chat_id"], row["owner_id"])
-
-                dashboard_data.append({
-                    "chat": f"Чат {row['chat_id']}",
-                    "mentor": tracker_data["tracker_name"] if tracker_data is not None else f"ID {row['owner_id']}",
-                    "stream": row.get("most_common_flow_in_chat") or "—",
-                    "week": 1,
-                    "start": str(datetime.date.today()),
-                    "students": int(tracker_activity.get("total_students", 0)) if tracker_activity else 0,
-                    "link": f"https://rb.infinitydev.tw1.su/get_tracker_chats_list?chat_id={row['chat_id']}",
-                    "date": str(datetime.date.today()),
-                    "avg": float((tracker_avg or {}).get("avg_response_hours") or 0),
-                    "pause": 0,
-                    "init": float(row.get("engagement_percent_in_chat") or 0),
-                    "student": float((tracker_activity or {}).get("chat_activity_score") or 0),
-                })
+        for row in daily_rows[:3000]:
+            dashboard_data.append({
+                "chat": f"Чат {row['chat_id']}",
+                "mentor": row.get("mentor_name") or f"ID {row.get('mentor_id', '')}",
+                "stream": row.get("stream_id") or "—",
+                "week": row.get("week_number") or 1,
+                "start": str(row.get("stream_start_date") or datetime.date.today()),
+                "students": 0,
+                "link": f"https://rb.infinitydev.tw1.su/get_tracker_chats_list?chat_id={row['chat_id']}",
+                "date": str(row.get("metric_date") or datetime.date.today()),
+                "avg": float(row.get("avg_response_time_hours") or 0),
+                "pause": int(row.get("max_pause_minutes") or 0),
+                "init": float(row.get("initiative_percent") or 0),
+                "student": float(row.get("student_activity_per_user") or 0),
+            })
     except Exception:
         logging.exception("mentor_dashboard_page failed")
 
