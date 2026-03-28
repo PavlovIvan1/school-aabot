@@ -176,7 +176,7 @@
       $('cards').innerHTML = filtered.map(r => `
         <div class="card">
           <div><b>${r.tracker_username}</b></div>
-          <div class="muted">id: ${r.tracker_id} • поток: ${r.flow || '—'} • неделя: ${r.week || '—'}</div>
+          <div class="muted">трекер: ${r.tracker_username} • id: ${r.tracker_id} • поток: ${r.flow || '—'} • неделя: ${r.week || '—'}</div>
           <div class="row"><span>Всего ДЗ</span><b>${r.total}</b></div>
           <div class="row"><span>Принято</span><b>${r.accepted}</b></div>
           <div class="row"><span>На доработку</span><b>${r.rework}</b></div>
