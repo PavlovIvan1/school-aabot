@@ -15,6 +15,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 import uvicorn
 import threading
 import multiprocessing
+import subprocess
 from typing import Dict, Any
 import aiofiles
 import traceback
@@ -2031,9 +2032,19 @@ async def check_info():
     config.BOT_IS_READY = True
 
     if config.TESTING_MODE:
-        multiprocessing.Process(target=start_debug_fast_api, daemon=True).start()
+        subprocess.Popen([
+            "python3", "-m", "uvicorn", "bot:app",
+            "--host", "0.0.0.0",
+            "--port", "8000",
+        ])
     else:
-        multiprocessing.Process(target=start_fast_api, daemon=True).start()
+        subprocess.Popen([
+            "python3", "-m", "uvicorn", "bot:app",
+            "--host", "0.0.0.0",
+            "--port", "443",
+            "--ssl-keyfile", "/etc/letsencrypt/live/rb.infinitydev.tw1.su/privkey.pem",
+            "--ssl-certfile", "/etc/letsencrypt/live/rb.infinitydev.tw1.su/fullchain.pem",
+        ])
 
     while True:
         print('Новый цикл')
