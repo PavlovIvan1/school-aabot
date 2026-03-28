@@ -14,6 +14,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi import WebSocket, WebSocketDisconnect
 import uvicorn
 import threading
+import subprocess
+import atexit
 from typing import Dict, Any
 import aiofiles
 import traceback
@@ -36,6 +38,7 @@ import keyboard
 db = MySQL()
 
 bot = Bot(token=config.BOT_TOKEN, default=DefaultBotProperties(link_preview_is_disabled=True))
+web_process = None
 
 
 def get_creds():
@@ -1973,6 +1976,40 @@ def start_debug_fast_api():
         print('Не получилось запустить FastAPI')
 
 
+def _stop_web_process():
+    global web_process
+    if web_process is None:
+        return
+    try:
+        web_process.terminate()
+    except Exception:
+        pass
+
+
+def start_web_process_managed():
+    global web_process
+
+    # Убиваем старые экземпляры uvicorn этого проекта, чтобы не было конфликтов 443
+    try:
+        subprocess.run("pkill -9 -f 'uvicorn bot:app' || true", shell=True, check=False)
+    except Exception:
+        pass
+
+    if config.TESTING_MODE:
+        cmd = ["python3", "-m", "uvicorn", "bot:app", "--host", "0.0.0.0", "--port", "8000"]
+    else:
+        cmd = [
+            "python3", "-m", "uvicorn", "bot:app",
+            "--host", "0.0.0.0",
+            "--port", "443",
+            "--ssl-keyfile", "/etc/letsencrypt/live/rb.infinitydev.tw1.su/privkey.pem",
+            "--ssl-certfile", "/etc/letsencrypt/live/rb.infinitydev.tw1.su/fullchain.pem",
+        ]
+
+    web_process = subprocess.Popen(cmd)
+    atexit.register(_stop_web_process)
+
+
 def clean_string(string) -> tuple[str, bool]:
     cleaned_string = ' '.join(string.split())
     return cleaned_string
@@ -2030,10 +2067,8 @@ async def check_info():
 
     config.BOT_IS_READY = True
 
-    if config.TESTING_MODE:
-        threading.Thread(target=start_debug_fast_api).start()
-    else:
-        threading.Thread(target=start_fast_api).start()
+    # FastAPI запускается отдельно от check_info, чтобы тяжелые циклы
+    # не подвешивали web-часть (дашборды/веб-чаты).
 
     while True:
         print('Новый цикл')
@@ -2435,6 +2470,9 @@ async def main() -> None:
     
 
     await set_default_commands(bot)
+
+    # Единый запуск через bot.py, но web-сервер в отдельном процессе.
+    start_web_process_managed()
 
     await on_startup()
 
