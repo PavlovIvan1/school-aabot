@@ -906,6 +906,12 @@ async def handle_alice_request(request: Request):
 async def mentor_dashboard_page():
     dashboard_data = []
 
+    def _has_any_non_zero(rows):
+        for r in rows:
+            if float(r.get("avg", 0) or 0) > 0 or int(r.get("pause", 0) or 0) > 0 or float(r.get("init", 0) or 0) > 0 or float(r.get("student", 0) or 0) > 0:
+                return True
+        return False
+
     # 1) Пытаемся взять агрегированные дневные метрики
     raw_daily_rows = db.get_mentor_dashboard_daily()
     daily_rows = [
@@ -934,13 +940,13 @@ async def mentor_dashboard_page():
             })
     else:
         # 2) Fallback на реальные расчёты из существующих таблиц
-        engagement_rows = db.get_tracker_engagement()
+        engagement_rows = db.get_mentors_engagement()
 
         if len(engagement_rows) != 0:
             for row in engagement_rows:
-                tracker_data = db.get_tracker_by_id(row["owner_id"])
-                tracker_activity = db.get_tracker_activity(row["chat_id"])
-                tracker_avg = db.get_tracker_avg_response_time(row["chat_id"], row["owner_id"])
+                tracker_data = db.get_mentor_by_id(row["owner_id"])
+                tracker_activity = db.get_mentor_activity(row["chat_id"])
+                tracker_avg = db.get_mentor_avg_response_time(row["chat_id"], row["owner_id"])
 
                 dashboard_data.append({
                     "chat": f"Чат {row['chat_id']}",
@@ -976,6 +982,112 @@ async def mentor_dashboard_page():
                         "init": float(row.get("initiative_percent") or 0),
                         "student": float(row.get("fast_response_share_percent") or 0) / 100.0,
                     })
+
+    # 4) Если после всех источников всё ещё только нули — строим из реальных trackers_messages
+    if len(dashboard_data) == 0 or not _has_any_non_zero(dashboard_data):
+        chat_agg = {}
+        user_ids = db.get_tracker_dialog_user_ids()
+
+        for uid in user_ids:
+            messages = db.get_trackers_messages_by_tg_id(int(uid))
+            if len(messages) < 2:
+                continue
+
+            chat_id = messages[-1].get("chat_id")
+            if chat_id is None:
+                continue
+
+            user_data = db.get_user(int(uid))
+            user_email = (user_data[0].get("email") if len(user_data) else "") or ""
+            try:
+                stream = db.get_flow_by_email(user_email) if user_email else "—"
+            except Exception:
+                stream = "—"
+
+            unix_times = [int(m.get("unix_time") or 0) for m in messages if int(m.get("unix_time") or 0) > 0]
+            first_date = datetime.date.today() if len(unix_times) == 0 else datetime.datetime.fromtimestamp(min(unix_times)).date()
+            last_date = datetime.date.today() if len(unix_times) == 0 else datetime.datetime.fromtimestamp(max(unix_times)).date()
+            week_number = max(1, int((datetime.date.today() - first_date).days // 7) + 1)
+
+            # avg response (user question -> next tracker message)
+            response_hours = []
+            for i, msg in enumerate(messages):
+                if not msg.get("from_user"):
+                    continue
+                q_time = int(msg.get("unix_time") or 0)
+                if q_time <= 0:
+                    continue
+                for j in range(i + 1, len(messages)):
+                    if not messages[j].get("from_user"):
+                        a_time = int(messages[j].get("unix_time") or 0)
+                        if a_time > q_time:
+                            response_hours.append((a_time - q_time) / 3600)
+                        break
+
+            avg_response = round(sum(response_hours) / len(response_hours), 2) if len(response_hours) else 0
+
+            max_pause = 0
+            for i in range(1, len(messages)):
+                prev_t = int(messages[i - 1].get("unix_time") or 0)
+                cur_t = int(messages[i].get("unix_time") or 0)
+                if prev_t > 0 and cur_t > prev_t:
+                    max_pause = max(max_pause, int((cur_t - prev_t) / 60))
+
+            tracker_msgs = [m for m in messages if not m.get("from_user")]
+            initiative_count = 0
+            for idx, m in enumerate(messages):
+                if m.get("from_user"):
+                    continue
+                if idx == 0:
+                    initiative_count += 1
+                    continue
+                prev_m = messages[idx - 1]
+                if not prev_m.get("from_user"):
+                    initiative_count += 1
+                    continue
+                delta_min = (int(m.get("unix_time") or 0) - int(prev_m.get("unix_time") or 0)) / 60
+                if delta_min > 360:
+                    initiative_count += 1
+            initiative_percent = round((initiative_count / len(tracker_msgs)) * 100, 2) if len(tracker_msgs) else 0
+
+            if chat_id not in chat_agg:
+                tracker_data = db.get_tracker_by_id(chat_id)
+                chat_agg[chat_id] = {
+                    "chat": f"Чат {chat_id}",
+                    "mentor": tracker_data["tracker_name"] if tracker_data else f"ID {chat_id}",
+                    "stream": stream,
+                    "week": week_number,
+                    "start": str(first_date),
+                    "students": 0,
+                    "link": f"https://rb.infinitydev.tw1.su/get_tracker_chats_list?chat_id={chat_id}",
+                    "date": str(last_date),
+                    "avg_values": [],
+                    "pause_values": [],
+                    "init_values": [],
+                }
+
+            chat_agg[chat_id]["students"] += 1
+            chat_agg[chat_id]["avg_values"].append(avg_response)
+            chat_agg[chat_id]["pause_values"].append(max_pause)
+            chat_agg[chat_id]["init_values"].append(initiative_percent)
+
+        dashboard_data = []
+        for _, row in chat_agg.items():
+            students_count = max(1, int(row["students"]))
+            dashboard_data.append({
+                "chat": row["chat"],
+                "mentor": row["mentor"],
+                "stream": row["stream"],
+                "week": row["week"],
+                "start": row["start"],
+                "students": students_count,
+                "link": row["link"],
+                "date": row["date"],
+                "avg": round(sum(row["avg_values"]) / len(row["avg_values"]), 2) if len(row["avg_values"]) else 0,
+                "pause": int(round(sum(row["pause_values"]) / len(row["pause_values"]))) if len(row["pause_values"]) else 0,
+                "init": round(sum(row["init_values"]) / len(row["init_values"]), 2) if len(row["init_values"]) else 0,
+                "student": round((sum(1 for v in row["avg_values"] if v > 0) / students_count), 2),
+            })
 
     async with aiofiles.open("html_pages/mentor_dashboard.html", mode="r", encoding="utf-8") as f:
         html_response = await f.read()
@@ -1028,7 +1140,10 @@ async def tracker_personal_dashboard_page():
                 continue
 
             email = user_data[0].get("email", "")
-            flow = db.get_flow_by_email(email) or "—"
+            try:
+                flow = db.get_flow_by_email(email) or "—"
+            except Exception:
+                flow = "—"
             tariff = config.USERS_ADDITIONAL_INFO.get(email.lower(), {}).get("tariff", "—")
 
             tracker_chat_id = messages[-1].get("chat_id")
@@ -1136,56 +1251,52 @@ async def tracker_homework_dashboard_page():
             tracker_info = db.get_tracker_by_id(int(tracker_chat_id)) if str(tracker_chat_id).lstrip('-').isdigit() else None
             grouped[key] = {
                 "tracker_id": int(tracker_chat_id) if str(tracker_chat_id).lstrip('-').isdigit() else tracker_chat_id,
-                "tracker": (tracker_info or {}).get("tracker_name") if tracker_info else f"ID {tracker_chat_id}",
+                "tracker_username": (tracker_info or {}).get("tracker_name") if tracker_info else f"Трекер {tracker_chat_id}",
                 "total": 0,
                 "accepted": 0,
                 "rework": 0,
-                "checking": 0,
-                "sent": 0,
+                "pending_review": 0,
+                "last_activity_date": None,
             }
 
         grouped[key]["total"] += 1
+
+        # Последняя активность по ДЗ трекера
+        dt_candidate = hw.get("check_time") or hw.get("update_time")
+        if dt_candidate:
+            try:
+                parsed_dt = datetime.datetime.strptime(str(dt_candidate), "%Y-%m-%d %H:%M:%S")
+                parsed_date = parsed_dt.date().isoformat()
+                cur_last = grouped[key].get("last_activity_date")
+                if cur_last is None or parsed_date > cur_last:
+                    grouped[key]["last_activity_date"] = parsed_date
+            except Exception:
+                pass
+
         status = (hw.get("status") or "").strip()
         if status == "✅":
             grouped[key]["accepted"] += 1
         elif status == "❌":
             grouped[key]["rework"] += 1
-        elif status == "На проверке":
-            grouped[key]["checking"] += 1
-        elif status == "⏳":
-            grouped[key]["sent"] += 1
+        elif status in ["На проверке", "⏳"]:
+            grouped[key]["pending_review"] += 1
 
     for key in grouped:
         item = grouped[key]
         total = item["total"] or 1
         item["accept_rate"] = round(item["accepted"] * 100.0 / total, 1)
+        if not item.get("last_activity_date"):
+            item["last_activity_date"] = datetime.date.today().isoformat()
         rows.append(item)
 
-    rows.sort(key=lambda x: x["total"], reverse=True)
+    rows.sort(key=lambda x: x["last_activity_date"], reverse=True)
 
-    html = """
-    <!DOCTYPE html>
-    <html lang=\"ru\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><title>ДЗ трекеров</title>
-    <style>
-    body{margin:0;background:#1a1a1a;color:#e8e8e8;font-family:Arial,sans-serif;padding:14px}
-    .panel{background:#222;border:1px solid #333;border-radius:10px;padding:12px}
-    table{width:100%;border-collapse:collapse;font-size:13px}
-    th,td{border-bottom:1px solid #333;padding:8px;text-align:left}
-    th{color:#a9a9a9;font-size:12px}
-    </style></head><body>
-    <div class=\"panel\"><h2 style=\"margin:0 0 8px 0;\">Дашборд ДЗ трекеров</h2><div style=\"color:#9a9a9a;font-size:12px;margin-bottom:10px;\">Сводка по проверке домашних заданий в одном месте</div>
-    <table><thead><tr><th>Трекер</th><th>ID</th><th>Всего ДЗ</th><th>Принято</th><th>На доработку</th><th>На проверке</th><th>Отправлено</th><th>% принятия</th></tr></thead><tbody>{ROWS}</tbody></table></div>
-    </body></html>
-    """
+    async with aiofiles.open("html_pages/tracker_homework_dashboard.html", mode="r", encoding="utf-8") as f:
+        html_response = await f.read()
 
-    html_rows = ""
-    for r in rows:
-        html_rows += (
-            f"<tr><td>{r['tracker']}</td><td>{r['tracker_id']}</td><td>{r['total']}</td><td>{r['accepted']}</td>"
-            f"<td>{r['rework']}</td><td>{r['checking']}</td><td>{r['sent']}</td><td>{r['accept_rate']}%</td></tr>"
-        )
+    html_response = html_response.replace("{TRACKER_HOMEWORK_DATA_JSON}", json.dumps(rows, ensure_ascii=False))
 
-    return HTMLResponse(content=html.replace("{ROWS}", html_rows), status_code=200)
+    return HTMLResponse(content=html_response, status_code=200)
 
 
 # Функционал с поддержкой

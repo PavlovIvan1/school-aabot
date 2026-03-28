@@ -44,7 +44,7 @@
     <div class="sub">Рабочее время: Пн–Пт, 10:00–19:00</div>
     <div class="sub">Нормы KPI: ср. ответ &lt; 3ч, макс. пауза &lt; 360 мин, инициативность &gt; 30%, доля активных чатов &gt; 80%.</div>
     <div class="filters">
-      <select id="period"><option>Период: Сегодня</option><option selected>Период: 7 дней</option><option>Период: 30 дней</option><option>Период: Всё время</option></select>
+      <select id="period"><option>Период: Сегодня</option><option>Период: 7 дней</option><option>Период: 30 дней</option><option selected>Период: Всё время</option></select>
       <select id="stream"></select>
       <select id="tracker"></select>
       <select id="week"></select>
@@ -205,14 +205,16 @@
   }
 
   function renderProblems(ds){
-    const p=[]; ds.forEach(r=>{ if(stAvg(r.avg)==='r') p.push(['Время ответа выше порога',r,`${r.avg.toFixed(1)} ч`,'<3 ч']); if(stPause(r.pause)==='r') p.push(['Макс. пауза выше порога',r,`${Math.round(r.pause)}`,'<360']); if(stInit(r.init)==='r') p.push(['Низкая инициативность',r,`${Math.round(r.init)}%`,'>30%']); });
+    const p=[]; ds.forEach(r=>{ if(stAvg(r.avg)==='r') p.push(['Время ответа выше порога',r,`${r.avg.toFixed(1)} ч`,'<3 ч']); if(stPause(r.pause)==='r') p.push(['Макс. пауза выше порога',r,`${Math.round(r.pause)} мин`,'< 360 мин']); if(stInit(r.init)==='r') p.push(['Низкая инициативность',r,`${Math.round(r.init)}%`,'>30%']); });
     problemsItems = p;
     problemsPage = 1;
     renderProblemsPage();
   }
   function renderStars(ds){
     if(!ds.length){$('stars').innerHTML='<div class="sub">Нет данных</div>';return;}
-    const fastest=[...ds].sort((a,b)=>a.avg-b.avg)[0], initiative=[...ds].sort((a,b)=>b.init-a.init)[0];
+    const fastest=[...ds].sort((a,b)=>a.avg-b.avg)[0];
+    const initiativeSorted=[...ds].sort((a,b)=>b.init-a.init);
+    const initiative=initiativeSorted.find(i=>i.link!==fastest.link) || initiativeSorted[0];
     $('stars').innerHTML=`<div class="chip">Лучший по скорости ответа: <b>${fastest.tracker}</b> / ${fastest.student} (${fastest.avg.toFixed(1)} ч) <a class="action" href="${fastest.link}" target="_blank">Ссылка</a></div><div class="chip">Лучший по инициативности: <b>${initiative.tracker}</b> / ${initiative.student} (${Math.round(initiative.init)}%) <a class="action" href="${initiative.link}" target="_blank">Ссылка</a></div>`;
   }
   function refresh(){ const ds=filtered(); currentPage = 1; renderKpis(ds); renderTable(ds); renderProblems(ds); renderStars(ds); $('detail').innerHTML='<span class="sub">Нажмите на строку чата</span>'; }

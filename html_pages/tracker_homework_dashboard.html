@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Дашборд ДЗ трекеров</title>
+  <style>
+    :root{--bg:#1a1a1a;--bg2:#222;--card:#262626;--line:#343434;--text:#e8e8e8;--muted:#a6a6a6}
+    *{box-sizing:border-box;font-family:Arial,sans-serif}
+    body{margin:0;background:var(--bg);color:var(--text)}
+    .wrap{max-width:1400px;margin:0 auto;padding:14px}
+    .panel{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px}
+    h1{margin:0;font-size:18px}.sub{margin-top:6px;color:var(--muted);font-size:12px}
+    .filters{display:grid;grid-template-columns:repeat(4,minmax(140px,1fr));gap:8px;margin-top:10px}
+    select,input,button{height:34px;background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:0 10px}
+    button{cursor:pointer}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left}
+    th{font-size:12px;color:var(--muted)}
+    .muted{color:var(--muted);font-size:12px}
+    .cards{display:none}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px}
+    .row{display:flex;justify-content:space-between;gap:10px;margin-top:6px;font-size:13px}
+    @media(max-width:900px){.filters{grid-template-columns:1fr 1fr}}
+    @media(max-width:768px){
+      .wrap{padding:10px}
+      .filters{grid-template-columns:1fr}
+      table{display:none}
+      .cards{display:block}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <h1>Дашборд ДЗ трекеров</h1>
+      <div class="sub">Показывает работу трекера по проверке ДЗ: принято, доработка, ожидают проверки.</div>
+      <div class="filters">
+        <select id="sort">
+          <option value="last_desc">Сортировка: по дате (новые)</option>
+          <option value="last_asc">Сортировка: по дате (старые)</option>
+          <option value="accept_desc">Сортировка: % принятия (убыв.)</option>
+          <option value="total_desc">Сортировка: всего ДЗ (убыв.)</option>
+        </select>
+        <input id="dateFrom" type="date" />
+        <input id="dateTo" type="date" />
+        <button id="apply">Применить</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <table>
+        <thead>
+          <tr>
+            <th>Трекер (username)</th>
+            <th>Всего ДЗ</th>
+            <th>Принято</th>
+            <th>На доработку</th>
+            <th>Ожидают проверки</th>
+            <th>% принятия</th>
+            <th>Последняя активность</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div id="cards" class="cards"></div>
+    </div>
+  </div>
+
+  <script>
+    const rows = {TRACKER_HOMEWORK_DATA_JSON};
+    const $ = i => document.getElementById(i);
+
+    function inRange(r){
+      const from = $('dateFrom').value;
+      const to = $('dateTo').value;
+      const d = r.last_activity_date || '';
+      if(!d) return true;
+      if(from && d < from) return false;
+      if(to && d > to) return false;
+      return true;
+    }
+
+    function sorted(data){
+      const s = $('sort').value;
+      const arr = [...data];
+      if(s==='last_desc') arr.sort((a,b)=>(b.last_activity_date||'').localeCompare(a.last_activity_date||''));
+      if(s==='last_asc') arr.sort((a,b)=>(a.last_activity_date||'').localeCompare(b.last_activity_date||''));
+      if(s==='accept_desc') arr.sort((a,b)=>(b.accept_rate||0)-(a.accept_rate||0));
+      if(s==='total_desc') arr.sort((a,b)=>(b.total||0)-(a.total||0));
+      return arr;
+    }
+
+    function render(){
+      const filtered = sorted(rows.filter(inRange));
+
+      $('rows').innerHTML = filtered.map(r => `
+        <tr>
+          <td>${r.tracker_username}<div class="muted">id: ${r.tracker_id}</div></td>
+          <td>${r.total}</td>
+          <td>${r.accepted}</td>
+          <td>${r.rework}</td>
+          <td>${r.pending_review}</td>
+          <td>${r.accept_rate}%</td>
+          <td>${r.last_activity_date || '—'}</td>
+        </tr>
+      `).join('');
+
+      $('cards').innerHTML = filtered.map(r => `
+        <div class="card">
+          <div><b>${r.tracker_username}</b></div>
+          <div class="muted">id: ${r.tracker_id}</div>
+          <div class="row"><span>Всего ДЗ</span><b>${r.total}</b></div>
+          <div class="row"><span>Принято</span><b>${r.accepted}</b></div>
+          <div class="row"><span>На доработку</span><b>${r.rework}</b></div>
+          <div class="row"><span>Ожидают проверки</span><b>${r.pending_review}</b></div>
+          <div class="row"><span>% принятия</span><b>${r.accept_rate}%</b></div>
+          <div class="row"><span>Последняя активность</span><b>${r.last_activity_date || '—'}</b></div>
+        </div>
+      `).join('');
+    }
+
+    $('apply').addEventListener('click', render);
+    render();
+  </script>
+</body>
+</html>
