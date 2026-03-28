@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi import WebSocket, WebSocketDisconnect
 import uvicorn
 import threading
+import multiprocessing
 from typing import Dict, Any
 import aiofiles
 import traceback
@@ -2030,9 +2031,9 @@ async def check_info():
     config.BOT_IS_READY = True
 
     if config.TESTING_MODE:
-        threading.Thread(target=start_debug_fast_api).start()
+        multiprocessing.Process(target=start_debug_fast_api, daemon=True).start()
     else:
-        threading.Thread(target=start_fast_api).start()
+        multiprocessing.Process(target=start_fast_api, daemon=True).start()
 
     while True:
         print('Новый цикл')
