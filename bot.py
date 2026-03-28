@@ -16,6 +16,7 @@ import uvicorn
 import threading
 import subprocess
 import atexit
+import os
 from typing import Dict, Any
 import aiofiles
 import traceback
@@ -2471,8 +2472,10 @@ async def main() -> None:
 
     await set_default_commands(bot)
 
-    # Единый запуск через bot.py, но web-сервер в отдельном процессе.
-    start_web_process_managed()
+    # По умолчанию web-сервер запускается отдельно (вторым процессом/tmux).
+    # Если нужно старое поведение "всё в одном", можно запустить с EMBED_WEB_SERVER=1.
+    if os.getenv("EMBED_WEB_SERVER", "0") == "1":
+        start_web_process_managed()
 
     await on_startup()
 
