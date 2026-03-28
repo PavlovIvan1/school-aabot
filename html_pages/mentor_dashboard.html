@@ -145,7 +145,21 @@
   </div>
 
   <script>
-    const data = {DASHBOARD_DATA_JSON};
+    const rawData = {DASHBOARD_DATA_JSON};
+    const data = (Array.isArray(rawData) ? rawData : []).map(r => ({
+      chat: r?.chat || '—',
+      mentor: r?.mentor || '—',
+      stream: r?.stream || '—',
+      week: Number(r?.week) || 1,
+      start: r?.start || '',
+      students: Number(r?.students) || 0,
+      link: r?.link || '#',
+      date: r?.date || '',
+      avg: Number(r?.avg) || 0,
+      pause: Number(r?.pause) || 0,
+      init: Number(r?.init) || 0,
+      student: Number(r?.student) || 0,
+    }));
 
     const $ = id => document.getElementById(id);
     const statusAvg = v => v < 3 ? 'g' : (v <= 5 ? 'y' : 'r');
