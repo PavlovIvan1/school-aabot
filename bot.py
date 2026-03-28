@@ -16,6 +16,8 @@ import uvicorn
 import threading
 import multiprocessing
 import subprocess
+import os
+import re
 from typing import Dict, Any
 import aiofiles
 import traceback
@@ -1974,6 +1976,28 @@ def start_debug_fast_api():
     except:
         print('Не получилось запустить FastAPI')
 
+
+def cleanup_web_port_if_needed():
+    if config.TESTING_MODE:
+        return
+
+    try:
+        output = subprocess.check_output("ss -ltnp | grep ':443' || true", shell=True, text=True)
+        pids = set(re.findall(r"pid=(\d+)", output))
+        current_pid = os.getpid()
+
+        for pid_str in pids:
+            pid = int(pid_str)
+            if pid == current_pid:
+                continue
+            try:
+                os.kill(pid, 9)
+                logging.warning(f"Killed stale process on 443: pid={pid}")
+            except Exception:
+                pass
+    except Exception:
+        pass
+
 def clean_string(string) -> tuple[str, bool]:
     cleaned_string = ' '.join(string.split())
     return cleaned_string
@@ -2031,20 +2055,8 @@ async def check_info():
 
     config.BOT_IS_READY = True
 
-    if config.TESTING_MODE:
-        subprocess.Popen([
-            "python3", "-m", "uvicorn", "bot:app",
-            "--host", "0.0.0.0",
-            "--port", "8000",
-        ])
-    else:
-        subprocess.Popen([
-            "python3", "-m", "uvicorn", "bot:app",
-            "--host", "0.0.0.0",
-            "--port", "443",
-            "--ssl-keyfile", "/etc/letsencrypt/live/rb.infinitydev.tw1.su/privkey.pem",
-            "--ssl-certfile", "/etc/letsencrypt/live/rb.infinitydev.tw1.su/fullchain.pem",
-        ])
+    # Запуск FastAPI вынесен в main(), чтобы не было гонок и повторных стартов
+    # во время инициализации check_info().
 
     while True:
         print('Новый цикл')
@@ -2446,6 +2458,13 @@ async def main() -> None:
     
 
     await set_default_commands(bot)
+
+    # Один запуск из bot.py: чистим зависшие процессы на 443 и поднимаем FastAPI.
+    cleanup_web_port_if_needed()
+    if config.TESTING_MODE:
+        threading.Thread(target=start_debug_fast_api, daemon=True).start()
+    else:
+        threading.Thread(target=start_fast_api, daemon=True).start()
     
     await on_startup()
 
