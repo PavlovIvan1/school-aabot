@@ -905,44 +905,36 @@ async def handle_alice_request(request: Request):
 @app.get("/mentor_dashboard")
 async def mentor_dashboard_page():
     dashboard_data = []
+    try:
+        # 1) Пытаемся взять агрегированные дневные метрики
+        raw_daily_rows = db.get_mentor_dashboard_daily()
+        daily_rows = [
+            row for row in raw_daily_rows
+            if float(row.get("avg_response_time_hours") or 0) > 0
+            or int(row.get("max_pause_minutes") or 0) > 0
+            or float(row.get("initiative_percent") or 0) > 0
+            or float(row.get("student_activity_per_user") or 0) > 0
+        ]
 
-    def _has_any_non_zero(rows):
-        for r in rows:
-            if float(r.get("avg", 0) or 0) > 0 or int(r.get("pause", 0) or 0) > 0 or float(r.get("init", 0) or 0) > 0 or float(r.get("student", 0) or 0) > 0:
-                return True
-        return False
-
-    # 1) Пытаемся взять агрегированные дневные метрики
-    raw_daily_rows = db.get_mentor_dashboard_daily()
-    daily_rows = [
-        row for row in raw_daily_rows
-        if float(row.get("avg_response_time_hours") or 0) > 0
-        or int(row.get("max_pause_minutes") or 0) > 0
-        or float(row.get("initiative_percent") or 0) > 0
-        or float(row.get("student_activity_per_user") or 0) > 0
-    ]
-
-    if len(daily_rows) != 0:
-        for row in daily_rows:
-            dashboard_data.append({
-                "chat": f"Чат {row['chat_id']}",
-                "mentor": row.get("mentor_name") or f"ID {row.get('mentor_id', '')}",
-                "stream": row.get("stream_id") or "—",
-                "week": row.get("week_number") or 1,
-                "start": str(row.get("stream_start_date") or datetime.date.today()),
-                "students": 0,
-                "link": f"https://rb.infinitydev.tw1.su/get_tracker_chats_list?chat_id={row['chat_id']}",
-                "date": str(row.get("metric_date") or datetime.date.today()),
-                "avg": float(row.get("avg_response_time_hours") or 0),
-                "pause": int(row.get("max_pause_minutes") or 0),
-                "init": float(row.get("initiative_percent") or 0),
-                "student": float(row.get("student_activity_per_user") or 0),
-            })
-    else:
-        # 2) Fallback на реальные расчёты из существующих таблиц
-        engagement_rows = db.get_mentors_engagement()
-
-        if len(engagement_rows) != 0:
+        if len(daily_rows) != 0:
+            for row in daily_rows:
+                dashboard_data.append({
+                    "chat": f"Чат {row['chat_id']}",
+                    "mentor": row.get("mentor_name") or f"ID {row.get('mentor_id', '')}",
+                    "stream": row.get("stream_id") or "—",
+                    "week": row.get("week_number") or 1,
+                    "start": str(row.get("stream_start_date") or datetime.date.today()),
+                    "students": 0,
+                    "link": f"https://rb.infinitydev.tw1.su/get_tracker_chats_list?chat_id={row['chat_id']}",
+                    "date": str(row.get("metric_date") or datetime.date.today()),
+                    "avg": float(row.get("avg_response_time_hours") or 0),
+                    "pause": int(row.get("max_pause_minutes") or 0),
+                    "init": float(row.get("initiative_percent") or 0),
+                    "student": float(row.get("student_activity_per_user") or 0),
+                })
+        else:
+            # Лёгкий fallback: только агрегированный запрос без тяжёлых переборов по всем сообщениям.
+            engagement_rows = db.get_mentors_engagement()
             for row in engagement_rows:
                 tracker_data = db.get_mentor_by_id(row["owner_id"])
                 tracker_activity = db.get_mentor_activity(row["chat_id"])
@@ -962,132 +954,8 @@ async def mentor_dashboard_page():
                     "init": float(row.get("engagement_percent_in_chat") or 0),
                     "student": float((tracker_activity or {}).get("chat_activity_score") or 0),
                 })
-        else:
-            # 3) Доп. fallback: агрегируем из tracker_personal_dashboard_daily
-            personal_rows = db.get_tracker_personal_dashboard_daily()
-            if len(personal_rows) != 0:
-                for row in personal_rows:
-                    tracker_id = row.get("tracker_id")
-                    dashboard_data.append({
-                        "chat": f"Чат {tracker_id}",
-                        "mentor": row.get("tracker_name") or f"ID {tracker_id}",
-                        "stream": row.get("stream_id") or "—",
-                        "week": row.get("week_number") or 1,
-                        "start": str(row.get("stream_start_date") or datetime.date.today()),
-                        "students": int(row.get("dialogs_count") or 0),
-                        "link": f"https://rb.infinitydev.tw1.su/get_tracker_chats_list?chat_id={tracker_id}",
-                        "date": str(row.get("metric_date") or datetime.date.today()),
-                        "avg": float(row.get("avg_response_time_hours") or 0),
-                        "pause": int(row.get("max_pause_minutes") or 0),
-                        "init": float(row.get("initiative_percent") or 0),
-                        "student": float(row.get("fast_response_share_percent") or 0) / 100.0,
-                    })
-
-    # 4) Если после всех источников всё ещё только нули — строим из реальных trackers_messages
-    if len(dashboard_data) == 0 or not _has_any_non_zero(dashboard_data):
-        chat_agg = {}
-        user_ids = db.get_tracker_dialog_user_ids()
-
-        for uid in user_ids:
-            messages = db.get_trackers_messages_by_tg_id(int(uid))
-            if len(messages) < 2:
-                continue
-
-            chat_id = messages[-1].get("chat_id")
-            if chat_id is None:
-                continue
-
-            user_data = db.get_user(int(uid))
-            user_email = (user_data[0].get("email") if len(user_data) else "") or ""
-            try:
-                stream = db.get_flow_by_email(user_email) if user_email else "—"
-            except Exception:
-                stream = "—"
-
-            unix_times = [int(m.get("unix_time") or 0) for m in messages if int(m.get("unix_time") or 0) > 0]
-            first_date = datetime.date.today() if len(unix_times) == 0 else datetime.datetime.fromtimestamp(min(unix_times)).date()
-            last_date = datetime.date.today() if len(unix_times) == 0 else datetime.datetime.fromtimestamp(max(unix_times)).date()
-            week_number = max(1, int((datetime.date.today() - first_date).days // 7) + 1)
-
-            # avg response (user question -> next tracker message)
-            response_hours = []
-            for i, msg in enumerate(messages):
-                if not msg.get("from_user"):
-                    continue
-                q_time = int(msg.get("unix_time") or 0)
-                if q_time <= 0:
-                    continue
-                for j in range(i + 1, len(messages)):
-                    if not messages[j].get("from_user"):
-                        a_time = int(messages[j].get("unix_time") or 0)
-                        if a_time > q_time:
-                            response_hours.append((a_time - q_time) / 3600)
-                        break
-
-            avg_response = round(sum(response_hours) / len(response_hours), 2) if len(response_hours) else 0
-
-            max_pause = 0
-            for i in range(1, len(messages)):
-                prev_t = int(messages[i - 1].get("unix_time") or 0)
-                cur_t = int(messages[i].get("unix_time") or 0)
-                if prev_t > 0 and cur_t > prev_t:
-                    max_pause = max(max_pause, int((cur_t - prev_t) / 60))
-
-            tracker_msgs = [m for m in messages if not m.get("from_user")]
-            initiative_count = 0
-            for idx, m in enumerate(messages):
-                if m.get("from_user"):
-                    continue
-                if idx == 0:
-                    initiative_count += 1
-                    continue
-                prev_m = messages[idx - 1]
-                if not prev_m.get("from_user"):
-                    initiative_count += 1
-                    continue
-                delta_min = (int(m.get("unix_time") or 0) - int(prev_m.get("unix_time") or 0)) / 60
-                if delta_min > 360:
-                    initiative_count += 1
-            initiative_percent = round((initiative_count / len(tracker_msgs)) * 100, 2) if len(tracker_msgs) else 0
-
-            if chat_id not in chat_agg:
-                tracker_data = db.get_tracker_by_id(chat_id)
-                chat_agg[chat_id] = {
-                    "chat": f"Чат {chat_id}",
-                    "mentor": tracker_data["tracker_name"] if tracker_data else f"ID {chat_id}",
-                    "stream": stream,
-                    "week": week_number,
-                    "start": str(first_date),
-                    "students": 0,
-                    "link": f"https://rb.infinitydev.tw1.su/get_tracker_chats_list?chat_id={chat_id}",
-                    "date": str(last_date),
-                    "avg_values": [],
-                    "pause_values": [],
-                    "init_values": [],
-                }
-
-            chat_agg[chat_id]["students"] += 1
-            chat_agg[chat_id]["avg_values"].append(avg_response)
-            chat_agg[chat_id]["pause_values"].append(max_pause)
-            chat_agg[chat_id]["init_values"].append(initiative_percent)
-
-        dashboard_data = []
-        for _, row in chat_agg.items():
-            students_count = max(1, int(row["students"]))
-            dashboard_data.append({
-                "chat": row["chat"],
-                "mentor": row["mentor"],
-                "stream": row["stream"],
-                "week": row["week"],
-                "start": row["start"],
-                "students": students_count,
-                "link": row["link"],
-                "date": row["date"],
-                "avg": round(sum(row["avg_values"]) / len(row["avg_values"]), 2) if len(row["avg_values"]) else 0,
-                "pause": int(round(sum(row["pause_values"]) / len(row["pause_values"]))) if len(row["pause_values"]) else 0,
-                "init": round(sum(row["init_values"]) / len(row["init_values"]), 2) if len(row["init_values"]) else 0,
-                "student": round((sum(1 for v in row["avg_values"] if v > 0) / students_count), 2),
-            })
+    except Exception:
+        logging.exception("mentor_dashboard_page failed")
 
     async with aiofiles.open("html_pages/mentor_dashboard.html", mode="r", encoding="utf-8") as f:
         html_response = await f.read()
@@ -1100,17 +968,18 @@ async def mentor_dashboard_page():
 @app.get("/tracker_personal_dashboard")
 async def tracker_personal_dashboard_page():
     dashboard_data = []
+    try:
+        # Используем только агрегированные дневные метрики — это быстрый запрос.
+        # Тяжёлый fallback с полным перебором trackers_messages убран,
+        # чтобы дашборд всегда открывался без долгой загрузки.
+        raw_daily_rows = db.get_tracker_personal_dashboard_daily()
+        daily_rows = [
+            row for row in raw_daily_rows
+            if float(row.get("avg_response_time_hours") or 0) > 0
+            or int(row.get("max_pause_minutes") or 0) > 0
+            or float(row.get("initiative_percent") or 0) > 0
+        ]
 
-    # 1) Пытаемся взять агрегированные дневные метрики
-    raw_daily_rows = db.get_tracker_personal_dashboard_daily()
-    daily_rows = [
-        row for row in raw_daily_rows
-        if float(row.get("avg_response_time_hours") or 0) > 0
-        or int(row.get("max_pause_minutes") or 0) > 0
-        or float(row.get("initiative_percent") or 0) > 0
-    ]
-
-    if len(daily_rows) != 0:
         for row in daily_rows:
             student_tg_id = row.get("student_tg_id")
             dashboard_data.append({
@@ -1126,106 +995,8 @@ async def tracker_personal_dashboard_page():
                 "init": float(row.get("initiative_percent") or 0),
                 "link": f"https://rb.infinitydev.tw1.su/get_tracker_chat?user_id={int(student_tg_id)}" if student_tg_id and str(student_tg_id).isdigit() and int(student_tg_id) > 0 else "#",
             })
-    else:
-        # 2) Fallback на реальные диалоги из trackers_messages
-        user_ids = db.get_tracker_dialog_user_ids()
-
-        for user_id in user_ids:
-            messages = db.get_trackers_messages_by_tg_id(int(user_id))
-            if len(messages) < 2:
-                continue
-
-            user_data = db.get_user(int(user_id))
-            if len(user_data) == 0:
-                continue
-
-            email = user_data[0].get("email", "")
-            try:
-                flow = db.get_flow_by_email(email) or "—"
-            except Exception:
-                flow = "—"
-            tariff = config.USERS_ADDITIONAL_INFO.get(email.lower(), {}).get("tariff", "—")
-
-            tracker_chat_id = messages[-1].get("chat_id")
-            tracker_data = db.get_tracker_by_id(tracker_chat_id)
-            tracker_name = tracker_data["tracker_name"] if tracker_data else f"ID {tracker_chat_id}"
-
-            unix_times = [int(m.get("unix_time") or 0) for m in messages if int(m.get("unix_time") or 0) > 0]
-            if len(unix_times) != 0:
-                first_dt = datetime.datetime.fromtimestamp(min(unix_times)).date()
-                last_dt = datetime.datetime.fromtimestamp(max(unix_times)).date()
-                week_number = max(1, int((datetime.date.today() - first_dt).days // 7) + 1)
-            else:
-                first_dt = datetime.date.today()
-                last_dt = datetime.date.today()
-                week_number = 1
-
-            # Среднее время ответа: вопрос пользователя -> следующий ответ трекера
-            response_hours = []
-            for i, msg in enumerate(messages):
-                if not msg.get("from_user"):
-                    continue
-
-                text = (msg.get("message_text") or "")
-                if "?" not in text and "почему" not in text.lower() and "как" not in text.lower():
-                    continue
-
-                q_time = int(msg.get("unix_time") or 0)
-                for j in range(i + 1, len(messages)):
-                    if not messages[j].get("from_user"):
-                        a_time = int(messages[j].get("unix_time") or 0)
-                        if a_time > q_time:
-                            response_hours.append((a_time - q_time) / 3600)
-                        break
-
-            avg_response = round(sum(response_hours) / len(response_hours), 2) if len(response_hours) else 0
-
-            # Макс пауза между любыми соседними сообщениями (мин)
-            max_pause = 0
-            for i in range(1, len(messages)):
-                prev_t = int(messages[i - 1].get("unix_time") or 0)
-                cur_t = int(messages[i].get("unix_time") or 0)
-                if cur_t > prev_t:
-                    max_pause = max(max_pause, int((cur_t - prev_t) / 60))
-
-            # Инициативность трекера: сообщение трекера не сразу ответом в 360 мин
-            tracker_msgs = [m for m in messages if not m.get("from_user")]
-            initiative_count = 0
-
-            for idx, m in enumerate(messages):
-                if m.get("from_user"):
-                    continue
-
-                if idx == 0:
-                    initiative_count += 1
-                    continue
-
-                prev_m = messages[idx - 1]
-                if not prev_m.get("from_user"):
-                    initiative_count += 1
-                    continue
-
-                delta_min = (int(m.get("unix_time") or 0) - int(prev_m.get("unix_time") or 0)) / 60
-                if delta_min > 360:
-                    initiative_count += 1
-
-            initiative_percent = round((initiative_count / len(tracker_msgs)) * 100, 2) if len(tracker_msgs) else 0
-
-            student_name = user_data[0].get("email", f"ID {user_id}")
-
-            dashboard_data.append({
-                "tracker": tracker_name,
-                "tracker_id": tracker_chat_id,
-                "student": student_name,
-                "stream": flow,
-                "tariff": tariff,
-                "week": week_number,
-                "date": str(last_dt),
-                "avg": avg_response,
-                "pause": max_pause,
-                "init": initiative_percent,
-                "link": f"https://rb.infinitydev.tw1.su/get_tracker_chat?user_id={int(user_id)}",
-            })
+    except Exception:
+        logging.exception("tracker_personal_dashboard_page failed")
 
     async with aiofiles.open("html_pages/tracker_personal_dashboard.html", mode="r", encoding="utf-8") as f:
         html_response = await f.read()
@@ -1237,80 +1008,83 @@ async def tracker_personal_dashboard_page():
 
 @app.get("/tracker_homework_dashboard")
 async def tracker_homework_dashboard_page():
-    homework_data = db.get_homework_with_flow()
     rows = []
     grouped = {}
+    try:
+        homework_data = db.get_homework_with_flow()
 
-    for hw in homework_data:
-        tracker_chat_id = hw.get("chat_id")
-        if tracker_chat_id is None:
-            continue
+        for hw in homework_data:
+            tracker_chat_id = hw.get("chat_id")
+            if tracker_chat_id is None:
+                continue
 
-        flow = (hw.get("flow") or "—")
-        key = f"{tracker_chat_id}::{flow}"
-        if key not in grouped:
-            tracker_info = db.get_tracker_by_id(int(tracker_chat_id)) if str(tracker_chat_id).lstrip('-').isdigit() else None
-            grouped[key] = {
-                "tracker_id": int(tracker_chat_id) if str(tracker_chat_id).lstrip('-').isdigit() else tracker_chat_id,
-                "tracker_username": (tracker_info or {}).get("tracker_name") if tracker_info else f"Трекер {tracker_chat_id}",
-                "flow": flow,
-                "total": 0,
-                "accepted": 0,
-                "rework": 0,
-                "pending_review": 0,
-                "first_activity_date": None,
-                "last_activity_date": None,
-            }
+            flow = (hw.get("flow") or "—")
+            key = f"{tracker_chat_id}::{flow}"
+            if key not in grouped:
+                tracker_info = db.get_tracker_by_id(int(tracker_chat_id)) if str(tracker_chat_id).lstrip('-').isdigit() else None
+                grouped[key] = {
+                    "tracker_id": int(tracker_chat_id) if str(tracker_chat_id).lstrip('-').isdigit() else tracker_chat_id,
+                    "tracker_username": (tracker_info or {}).get("tracker_name") if tracker_info else f"Трекер {tracker_chat_id}",
+                    "flow": flow,
+                    "total": 0,
+                    "accepted": 0,
+                    "rework": 0,
+                    "pending_review": 0,
+                    "first_activity_date": None,
+                    "last_activity_date": None,
+                }
 
-        grouped[key]["total"] += 1
+            grouped[key]["total"] += 1
 
-        # Последняя активность по ДЗ трекера
-        dt_candidate = hw.get("check_time") or hw.get("update_time")
-        if dt_candidate:
+            # Последняя активность по ДЗ трекера
+            dt_candidate = hw.get("check_time") or hw.get("update_time")
+            if dt_candidate:
+                try:
+                    parsed_dt = datetime.datetime.strptime(str(dt_candidate), "%Y-%m-%d %H:%M:%S")
+                    parsed_date = parsed_dt.date().isoformat()
+
+                    cur_first = grouped[key].get("first_activity_date")
+                    if cur_first is None or parsed_date < cur_first:
+                        grouped[key]["first_activity_date"] = parsed_date
+
+                    cur_last = grouped[key].get("last_activity_date")
+                    if cur_last is None or parsed_date > cur_last:
+                        grouped[key]["last_activity_date"] = parsed_date
+                except Exception:
+                    pass
+
+            status = (hw.get("status") or "").strip()
+            if status == "✅":
+                grouped[key]["accepted"] += 1
+            elif status == "❌":
+                grouped[key]["rework"] += 1
+            elif status in ["На проверке", "⏳"]:
+                grouped[key]["pending_review"] += 1
+
+        for key in grouped:
+            item = grouped[key]
+            total = item["total"] or 1
+            item["accept_rate"] = round(item["accepted"] * 100.0 / total, 1)
+            if not item.get("first_activity_date"):
+                item["first_activity_date"] = datetime.date.today().isoformat()
+            if not item.get("last_activity_date"):
+                item["last_activity_date"] = datetime.date.today().isoformat()
+
             try:
-                parsed_dt = datetime.datetime.strptime(str(dt_candidate), "%Y-%m-%d %H:%M:%S")
-                parsed_date = parsed_dt.date().isoformat()
-
-                cur_first = grouped[key].get("first_activity_date")
-                if cur_first is None or parsed_date < cur_first:
-                    grouped[key]["first_activity_date"] = parsed_date
-
-                cur_last = grouped[key].get("last_activity_date")
-                if cur_last is None or parsed_date > cur_last:
-                    grouped[key]["last_activity_date"] = parsed_date
+                start_dt = datetime.datetime.strptime(str(item.get("first_activity_date")), "%Y-%m-%d").date()
+                days = (datetime.date.today() - start_dt).days
+                if days > 41:
+                    item["week"] = ">6 нед."
+                else:
+                    item["week"] = str(max(1, days // 7 + 1))
             except Exception:
-                pass
+                item["week"] = "1"
 
-        status = (hw.get("status") or "").strip()
-        if status == "✅":
-            grouped[key]["accepted"] += 1
-        elif status == "❌":
-            grouped[key]["rework"] += 1
-        elif status in ["На проверке", "⏳"]:
-            grouped[key]["pending_review"] += 1
+            rows.append(item)
 
-    for key in grouped:
-        item = grouped[key]
-        total = item["total"] or 1
-        item["accept_rate"] = round(item["accepted"] * 100.0 / total, 1)
-        if not item.get("first_activity_date"):
-            item["first_activity_date"] = datetime.date.today().isoformat()
-        if not item.get("last_activity_date"):
-            item["last_activity_date"] = datetime.date.today().isoformat()
-
-        try:
-            start_dt = datetime.datetime.strptime(str(item.get("first_activity_date")), "%Y-%m-%d").date()
-            days = (datetime.date.today() - start_dt).days
-            if days > 41:
-                item["week"] = ">6 нед."
-            else:
-                item["week"] = str(max(1, days // 7 + 1))
-        except Exception:
-            item["week"] = "1"
-
-        rows.append(item)
-
-    rows.sort(key=lambda x: x["last_activity_date"], reverse=True)
+        rows.sort(key=lambda x: x["last_activity_date"], reverse=True)
+    except Exception:
+        logging.exception("tracker_homework_dashboard_page failed")
 
     async with aiofiles.open("html_pages/tracker_homework_dashboard.html", mode="r", encoding="utf-8") as f:
         html_response = await f.read()
