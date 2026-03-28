@@ -1237,7 +1237,7 @@ async def tracker_personal_dashboard_page():
 
 @app.get("/tracker_homework_dashboard")
 async def tracker_homework_dashboard_page():
-    homework_data = db.get_all_homeworks()
+    homework_data = db.get_homework_with_flow()
     rows = []
     grouped = {}
 
@@ -1246,16 +1246,19 @@ async def tracker_homework_dashboard_page():
         if tracker_chat_id is None:
             continue
 
-        key = str(tracker_chat_id)
+        flow = (hw.get("flow") or "—")
+        key = f"{tracker_chat_id}::{flow}"
         if key not in grouped:
             tracker_info = db.get_tracker_by_id(int(tracker_chat_id)) if str(tracker_chat_id).lstrip('-').isdigit() else None
             grouped[key] = {
                 "tracker_id": int(tracker_chat_id) if str(tracker_chat_id).lstrip('-').isdigit() else tracker_chat_id,
                 "tracker_username": (tracker_info or {}).get("tracker_name") if tracker_info else f"Трекер {tracker_chat_id}",
+                "flow": flow,
                 "total": 0,
                 "accepted": 0,
                 "rework": 0,
                 "pending_review": 0,
+                "first_activity_date": None,
                 "last_activity_date": None,
             }
 
@@ -1267,6 +1270,11 @@ async def tracker_homework_dashboard_page():
             try:
                 parsed_dt = datetime.datetime.strptime(str(dt_candidate), "%Y-%m-%d %H:%M:%S")
                 parsed_date = parsed_dt.date().isoformat()
+
+                cur_first = grouped[key].get("first_activity_date")
+                if cur_first is None or parsed_date < cur_first:
+                    grouped[key]["first_activity_date"] = parsed_date
+
                 cur_last = grouped[key].get("last_activity_date")
                 if cur_last is None or parsed_date > cur_last:
                     grouped[key]["last_activity_date"] = parsed_date
@@ -1285,8 +1293,21 @@ async def tracker_homework_dashboard_page():
         item = grouped[key]
         total = item["total"] or 1
         item["accept_rate"] = round(item["accepted"] * 100.0 / total, 1)
+        if not item.get("first_activity_date"):
+            item["first_activity_date"] = datetime.date.today().isoformat()
         if not item.get("last_activity_date"):
             item["last_activity_date"] = datetime.date.today().isoformat()
+
+        try:
+            start_dt = datetime.datetime.strptime(str(item.get("first_activity_date")), "%Y-%m-%d").date()
+            days = (datetime.date.today() - start_dt).days
+            if days > 41:
+                item["week"] = ">6 нед."
+            else:
+                item["week"] = str(max(1, days // 7 + 1))
+        except Exception:
+            item["week"] = "1"
+
         rows.append(item)
 
     rows.sort(key=lambda x: x["last_activity_date"], reverse=True)

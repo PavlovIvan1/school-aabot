@@ -11,22 +11,29 @@
     .wrap{max-width:1400px;margin:0 auto;padding:14px}
     .panel{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px}
     h1{margin:0;font-size:18px}.sub{margin-top:6px;color:var(--muted);font-size:12px}
-    .filters{display:grid;grid-template-columns:repeat(4,minmax(140px,1fr));gap:8px;margin-top:10px}
+    .filters{display:grid;grid-template-columns:repeat(7,minmax(120px,1fr));gap:8px;margin-top:10px}
     select,input,button{height:34px;background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:0 10px}
     button{cursor:pointer}
-    table{width:100%;border-collapse:collapse;font-size:13px}
+    .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+    table{width:100%;border-collapse:collapse;font-size:13px;min-width:760px}
     th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left}
     th{font-size:12px;color:var(--muted)}
     .muted{color:var(--muted);font-size:12px}
     .cards{display:none}
     .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px}
-    .row{display:flex;justify-content:space-between;gap:10px;margin-top:6px;font-size:13px}
+    .row{display:flex;justify-content:space-between;gap:10px;margin-top:6px;font-size:13px;align-items:center}
+    .empty{color:var(--muted);font-size:13px;padding:12px 4px}
+    @media(max-width:1200px){.filters{grid-template-columns:1fr 1fr 1fr 1fr}}
+    @media(max-width:1100px){.filters{grid-template-columns:1fr 1fr 1fr}}
     @media(max-width:900px){.filters{grid-template-columns:1fr 1fr}}
     @media(max-width:768px){
       .wrap{padding:10px}
+      .panel{padding:10px}
       .filters{grid-template-columns:1fr}
-      table{display:none}
+      .table-wrap{display:none}
       .cards{display:block}
+      .card{padding:12px}
+      .row{font-size:14px}
     }
   </style>
 </head>
@@ -36,6 +43,14 @@
       <h1>Дашборд ДЗ трекеров</h1>
       <div class="sub">Показывает работу трекера по проверке ДЗ: принято, доработка, ожидают проверки.</div>
       <div class="filters">
+        <select id="flow"></select>
+        <select id="week"></select>
+        <select id="period">
+          <option value="all" selected>Период: Всё время</option>
+          <option value="today">Период: Сегодня</option>
+          <option value="7d">Период: 7 дней</option>
+          <option value="30d">Период: 30 дней</option>
+        </select>
         <select id="sort">
           <option value="last_desc">Сортировка: по дате (новые)</option>
           <option value="last_asc">Сортировка: по дате (старые)</option>
@@ -49,20 +64,24 @@
     </div>
 
     <div class="panel">
-      <table>
-        <thead>
-          <tr>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
             <th>Трекер (username)</th>
+            <th>Поток</th>
+            <th>Неделя</th>
             <th>Всего ДЗ</th>
             <th>Принято</th>
             <th>На доработку</th>
-            <th>Ожидают проверки</th>
-            <th>% принятия</th>
-            <th>Последняя активность</th>
-          </tr>
-        </thead>
-        <tbody id="rows"></tbody>
-      </table>
+              <th>Ожидают проверки</th>
+              <th>% принятия</th>
+              <th>Последняя активность</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
       <div id="cards" class="cards"></div>
     </div>
   </div>
@@ -71,6 +90,44 @@
     const rows = {TRACKER_HOMEWORK_DATA_JSON};
     const $ = i => document.getElementById(i);
 
+    function fillFilters(){
+      const flows = ['Все', ...new Set(rows.map(r => r.flow || '—'))];
+      const weeks = ['Все', ...new Set(rows.map(r => String(r.week || '—')))];
+      $('flow').innerHTML = flows.map(v => `<option value="${v}">${v === 'Все' ? 'Поток: Все' : `Поток: ${v}`}</option>`).join('');
+      $('week').innerHTML = weeks.map(v => `<option value="${v}">${v === 'Все' ? 'Неделя: Все' : `Неделя: ${v}`}</option>`).join('');
+    }
+
+    function toISODate(d){
+      const y = d.getFullYear();
+      const m = String(d.getMonth()+1).padStart(2,'0');
+      const day = String(d.getDate()).padStart(2,'0');
+      return `${y}-${m}-${day}`;
+    }
+
+    function applyPeriodPreset(){
+      const period = $('period').value;
+      const today = new Date();
+      const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+      if(period === 'all'){
+        $('dateFrom').value = '';
+        $('dateTo').value = '';
+        return;
+      }
+
+      if(period === 'today'){
+        const t = toISODate(start);
+        $('dateFrom').value = t;
+        $('dateTo').value = t;
+        return;
+      }
+
+      const from = new Date(start);
+      from.setDate(from.getDate() - (period === '7d' ? 6 : 29));
+      $('dateFrom').value = toISODate(from);
+      $('dateTo').value = toISODate(start);
+    }
+
     function inRange(r){
       const from = $('dateFrom').value;
       const to = $('dateTo').value;
@@ -78,6 +135,8 @@
       if(!d) return true;
       if(from && d < from) return false;
       if(to && d > to) return false;
+      if($('flow').value !== 'Все' && (r.flow || '—') !== $('flow').value) return false;
+      if($('week').value !== 'Все' && String(r.week || '—') !== $('week').value) return false;
       return true;
     }
 
@@ -94,9 +153,17 @@
     function render(){
       const filtered = sorted(rows.filter(inRange));
 
+      if(!filtered.length){
+        $('rows').innerHTML = '<tr><td colspan="9" class="empty">Нет данных за выбранный период</td></tr>';
+        $('cards').innerHTML = '<div class="empty">Нет данных за выбранный период</div>';
+        return;
+      }
+
       $('rows').innerHTML = filtered.map(r => `
         <tr>
           <td>${r.tracker_username}<div class="muted">id: ${r.tracker_id}</div></td>
+          <td>${r.flow || '—'}</td>
+          <td>${r.week || '—'}</td>
           <td>${r.total}</td>
           <td>${r.accepted}</td>
           <td>${r.rework}</td>
@@ -109,7 +176,7 @@
       $('cards').innerHTML = filtered.map(r => `
         <div class="card">
           <div><b>${r.tracker_username}</b></div>
-          <div class="muted">id: ${r.tracker_id}</div>
+          <div class="muted">id: ${r.tracker_id} • поток: ${r.flow || '—'} • неделя: ${r.week || '—'}</div>
           <div class="row"><span>Всего ДЗ</span><b>${r.total}</b></div>
           <div class="row"><span>Принято</span><b>${r.accepted}</b></div>
           <div class="row"><span>На доработку</span><b>${r.rework}</b></div>
@@ -120,7 +187,13 @@
       `).join('');
     }
 
+    $('period').addEventListener('change', () => { applyPeriodPreset(); render(); });
+    $('sort').addEventListener('change', render);
+    $('flow').addEventListener('change', render);
+    $('week').addEventListener('change', render);
     $('apply').addEventListener('click', render);
+    fillFilters();
+    applyPeriodPreset();
     render();
   </script>
 </body>
