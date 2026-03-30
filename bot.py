@@ -1997,7 +1997,8 @@ def clean_string(string) -> tuple[str, bool]:
 
 async def check_info():
     time_to_clear = time.time() + 360
-    metrics_time = time.time() + 600
+    # Первый расчёт метрик сразу после старта, далее каждые 10 минут.
+    metrics_time = 0
     time_to_update_trackers = 0
     trackers_data = {}
 
