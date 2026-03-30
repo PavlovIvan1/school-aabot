@@ -11,7 +11,7 @@ from aiogram import BaseMiddleware
 from aiogram.types import InputMediaVideo, InputMediaDocument
 from aiogram.types import TelegramObject, FSInputFile
 from aiogram import types
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
 import re
 
 import datetime
@@ -284,7 +284,14 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
     # чтобы /start отвечал мгновенно без риска подвисаний на БД.
     has_tracker_unread = False
 
-    await message.answer_photo(photo=FSInputFile("files/start.jpg"), caption="""Рады видеть тебя в обучении «Заработок на Reels»📱
+    try:
+        await message.answer_photo(photo=FSInputFile("files/start.jpg"), caption="""Рады видеть тебя в обучении «Заработок на Reels»📱
+
+Здесь твои домашние задания, связь с личным трекером и поддержкой. Всё в одном месте — удобно и без лишних поисков
+
+Выбирай нужный раздел ниже и нажимай на кнопку👇""", reply_markup=keyboard.main_keyboard(include_dashboards=is_staff, has_tracker_unread=has_tracker_unread))
+    except TelegramRetryAfter:
+        await message.answer("""Рады видеть тебя в обучении «Заработок на Reels»📱
 
 Здесь твои домашние задания, связь с личным трекером и поддержкой. Всё в одном месте — удобно и без лишних поисков
 
@@ -311,7 +318,14 @@ async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
     # чтобы возврат в меню работал стабильно.
     has_tracker_unread = False
 
-    await call.message.answer_photo(photo=FSInputFile("files/start.jpg"), caption="""Рады видеть тебя в обучении «Заработок на Reels»📱
+    try:
+        await call.message.answer_photo(photo=FSInputFile("files/start.jpg"), caption="""Рады видеть тебя в обучении «Заработок на Reels»📱
+
+Здесь твои домашние задания, связь с личным трекером и поддержкой. Всё в одном месте — удобно и без лишних поисков
+
+Выбирай нужный раздел ниже и нажимай на кнопку👇""", reply_markup=keyboard.main_keyboard(include_dashboards=is_staff, has_tracker_unread=has_tracker_unread))
+    except TelegramRetryAfter:
+        await call.message.answer("""Рады видеть тебя в обучении «Заработок на Reels»📱
 
 Здесь твои домашние задания, связь с личным трекером и поддержкой. Всё в одном месте — удобно и без лишних поисков
 
