@@ -289,10 +289,9 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
             await message.bot.send_message(config.LOG_CHAT_ID, f'Не удалось найти информацию по быстрой ссылке: {message.from_user.full_name} @{message.from_user.username} (ID: {message.from_user.id})\nАргументы: {start_args}')
             return
         
-    try:
-        has_tracker_unread = db.has_unread_tracker_messages(message.from_user.id)
-    except Exception:
-        has_tracker_unread = False
+    # Временный safe-mode: отключаем проверку непрочитанных,
+    # чтобы /start отвечал мгновенно без риска подвисаний на БД.
+    has_tracker_unread = False
 
     await message.answer_photo(photo=FSInputFile("files/start.jpg"), caption="""Рады видеть тебя в обучении «Заработок на Reels»📱
 
@@ -317,10 +316,9 @@ async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
     except:
         pass
 
-    try:
-        has_tracker_unread = db.has_unread_tracker_messages(call.from_user.id)
-    except Exception:
-        has_tracker_unread = False
+    # Временный safe-mode: отключаем проверку непрочитанных,
+    # чтобы возврат в меню работал стабильно.
+    has_tracker_unread = False
 
     await call.message.answer_photo(photo=FSInputFile("files/start.jpg"), caption="""Рады видеть тебя в обучении «Заработок на Reels»📱
 
