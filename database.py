@@ -515,6 +515,34 @@ class MySQL:
         self.cursor.execute("SELECT DISTINCT tg_id FROM trackers_messages WHERE (is_deleted IS NULL OR is_deleted = FALSE)")
         return [i["tg_id"] for i in self.cursor.fetchall() if i.get("tg_id") is not None]
 
+    def has_unread_tracker_messages(self, tg_id: int) -> bool:
+        """Есть ли у ученика непрочитанные сообщения от трекера.
+
+        Правило: есть сообщение от трекера (from_user = FALSE) с message_id
+        больше, чем последнее сообщение от ученика (from_user = TRUE).
+        """
+        self.cursor.execute(
+            """
+            SELECT EXISTS(
+                SELECT 1
+                FROM trackers_messages tm
+                WHERE tm.tg_id = %s
+                  AND (tm.is_deleted IS NULL OR tm.is_deleted = FALSE)
+                  AND tm.from_user = FALSE
+                  AND tm.message_id > COALESCE((
+                      SELECT MAX(tm2.message_id)
+                      FROM trackers_messages tm2
+                      WHERE tm2.tg_id = %s
+                        AND (tm2.is_deleted IS NULL OR tm2.is_deleted = FALSE)
+                        AND tm2.from_user = TRUE
+                  ), 0)
+            ) AS has_unread
+            """,
+            (tg_id, tg_id)
+        )
+        result = self.cursor.fetchone()
+        return bool(result and result.get("has_unread"))
+
     def delete_tracker_message(self, message_id: int, user_id: int = None):
         self.cursor.execute("UPDATE trackers_messages SET is_deleted = TRUE WHERE message_id = %s", (message_id,))
         self.database.commit()

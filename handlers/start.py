@@ -156,7 +156,7 @@ class SubMiddleware(BaseMiddleware):
         user_data = db.get_user(event.from_user.id)
         
         if len(user_data) == 0:
-            return await event.answer("Вы не найдены в списке учеников, попробуйте /start", show_alert=True)
+            return await event.answer("Чтобы продолжить, отправьте почту сообщением в чат 👇")
 
         if config.BOT_IS_READY:
             return await handler(event, data)
@@ -178,7 +178,7 @@ class SecondSubMiddleware(BaseMiddleware):
         user_data = db.get_user(event.from_user.id)
         
         if len(user_data) == 0 and event.text != '/skip_state' and event.chat.id > 0 and event.text != '/start' and 'state' not in data:
-            return await event.answer("Вы не найдены в списке учеников, попробуйте /start", show_alert=True)
+            return await event.answer("Отправьте вашу почту в ответ на приветственное сообщение 👇")
         
         
         for _ in range(3):
@@ -289,11 +289,13 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
             await message.bot.send_message(config.LOG_CHAT_ID, f'Не удалось найти информацию по быстрой ссылке: {message.from_user.full_name} @{message.from_user.username} (ID: {message.from_user.id})\nАргументы: {start_args}')
             return
         
+    has_tracker_unread = db.has_unread_tracker_messages(message.from_user.id)
+
     await message.answer_photo(photo=FSInputFile("files/start.jpg"), caption="""Рады видеть тебя в обучении «Заработок на Reels»📱
 
 Здесь твои домашние задания, связь с личным трекером и поддержкой. Всё в одном месте — удобно и без лишних поисков
 
-Выбирай нужный раздел ниже и нажимай на кнопку👇""", reply_markup=keyboard.main_keyboard(include_dashboards=is_staff))
+Выбирай нужный раздел ниже и нажимай на кнопку👇""", reply_markup=keyboard.main_keyboard(include_dashboards=is_staff, has_tracker_unread=has_tracker_unread))
 
 
 @start_router.callback_query(F.data == 'main')
@@ -312,11 +314,13 @@ async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
     except:
         pass
 
+    has_tracker_unread = db.has_unread_tracker_messages(call.from_user.id)
+
     await call.message.answer_photo(photo=FSInputFile("files/start.jpg"), caption="""Рады видеть тебя в обучении «Заработок на Reels»📱
 
 Здесь твои домашние задания, связь с личным трекером и поддержкой. Всё в одном месте — удобно и без лишних поисков
 
-Выбирай нужный раздел ниже и нажимай на кнопку👇""", reply_markup=keyboard.main_keyboard(include_dashboards=is_staff))
+Выбирай нужный раздел ниже и нажимай на кнопку👇""", reply_markup=keyboard.main_keyboard(include_dashboards=is_staff, has_tracker_unread=has_tracker_unread))
 
 
 @start_router.callback_query(F.data == 'study_menu')
@@ -1722,8 +1726,20 @@ async def command_start_handler(message: Message) -> None:
 
     try:
         await message.bot.set_message_reaction(message.chat.id, message.message_id, [{"type": "emoji", "emoji": "👍"}])
-    except TelegramBadRequest:
-        pass  # Message not found or other error
+    except Exception as reaction_error:
+        # Фолбэк для чатов, где реакции недоступны/запрещены
+        try:
+            await message.reply("✅ Принято")
+        except Exception:
+            pass
+
+        try:
+            await message.bot.send_message(
+                config.LOG_CHAT_ID,
+                f"Не удалось поставить реакцию в чате {message.chat.id} на сообщение {message.message_id}: {reaction_error}"
+            )
+        except Exception:
+            pass
 
     if message.text.startswith('+'):
         await send_congratulation_message(message, int(homework_data[0]['lesson_id']), int(homework_data[0]['user_data'].split()[-1]))
