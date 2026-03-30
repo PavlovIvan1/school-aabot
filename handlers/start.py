@@ -1135,11 +1135,13 @@ async def send_congratulation_message(message: Message, lesson_id: int, user_id)
             if "analog" in required_homework[i]:
                 ignore_lessons += required_homework[i]["analog"]
 
-    if "analog" in required_homework[lesson_id]:
+    lesson_required_data = required_homework.get(lesson_id, {})
+
+    if "analog" in lesson_required_data:
         count_analog_done = 0
 
         for i in done_homework_ids:
-            if i in required_homework[lesson_id]["analog"]:
+            if i in lesson_required_data["analog"]:
                 count_analog_done += 1
 
         if count_analog_done >= 2:
