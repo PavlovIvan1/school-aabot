@@ -158,14 +158,9 @@ class SubMiddleware(BaseMiddleware):
         if len(user_data) == 0:
             return await event.answer("Чтобы продолжить, отправьте почту сообщением в чат 👇")
 
-        if config.BOT_IS_READY:
-            return await handler(event, data)
-
-        try:
-            return await event.answer("Бот перезагружается, попробуйте снова через 10 секунд", show_alert=True)
-        except TelegramBadRequest:
-            # Query is too old, ignore the error
-            pass
+        # Не блокируем callback-обработчики флагом готовности,
+        # чтобы не попадать в спам/флуд-контроль Telegram.
+        return await handler(event, data)
     
 
 class SecondSubMiddleware(BaseMiddleware):
@@ -181,13 +176,9 @@ class SecondSubMiddleware(BaseMiddleware):
             return await event.answer("Отправьте вашу почту в ответ на приветственное сообщение 👇")
         
         
-        for _ in range(3):
-            if config.BOT_IS_READY:
-                return await handler(event, data)
-            
-            await asyncio.sleep(10)
-
-        return await event.answer("Бот ещё не готов к работе, попробуйте позже", show_alert=True)
+        # Не держим сообщение в ожидании готовности и не отправляем
+        # системные ответы, чтобы избежать Flood control на /start.
+        return await handler(event, data)
     
 
 start_router = Router()
