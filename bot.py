@@ -817,9 +817,11 @@ async def handle_alice_request(request: Request):
 
     db_users_from_config = db.get_users_by_tracker_chat_id(chat_id)
     db_users_from_access = db.get_users_access_emails_by_chat_id(chat_id)
+    db_users_from_homework = db.get_users_emails_by_homework_chat_id(chat_id)
+    db_users_from_messages = db.get_users_emails_by_tracker_messages_chat_id(chat_id)
     db_users_list = list(dict.fromkeys([
         str(email).lower().strip()
-        for email in (db_users_from_config + db_users_from_access)
+        for email in (db_users_from_config + db_users_from_access + db_users_from_homework + db_users_from_messages)
         if email
     ]))
     html_messages = ''
@@ -1995,7 +1997,7 @@ def clean_string(string) -> tuple[str, bool]:
 
 async def check_info():
     time_to_clear = time.time() + 360
-    metrics_time = time.time() + 60000000000
+    metrics_time = time.time() + 600
     time_to_update_trackers = 0
     trackers_data = {}
 
@@ -2380,6 +2382,24 @@ async def check_info():
                             continue
                         
                         sheet_rows.append([mentor_data["mentor_name"], str(data["most_common_flow_in_chat"]), str(data["engagement_percent_in_chat"]), str(mentor_activity["chat_activity_score"]), "0" if mentor_avg["avg_response_seconds"] is None else str(mentor_avg["avg_response_seconds"]//3600)])
+
+                        try:
+                            db.upsert_mentor_dashboard_daily(
+                                metric_date=datetime.date.today(),
+                                chat_id=int(data["chat_id"]),
+                                mentor_id=int(data["owner_id"]),
+                                mentor_name=mentor_data.get("mentor_name") or f"ID {data['owner_id']}",
+                                stream_id=str(data.get("most_common_flow_in_chat") or "—"),
+                                stream_start_date=None,
+                                week_number=1,
+                                avg_response_time_hours=float(mentor_avg.get("avg_response_hours") or 0),
+                                max_pause_minutes=0,
+                                initiative_percent=float(data.get("engagement_percent_in_chat") or 0),
+                                student_activity_per_user=float(mentor_activity.get("chat_activity_score") or 0),
+                                avg_message_length=0,
+                            )
+                        except Exception as upsert_error:
+                            print(f"Ошибка upsert mentor_dashboard_daily: {upsert_error}")
                         
 
                     sheet_rows.reverse()
@@ -2401,8 +2421,40 @@ async def check_info():
 
                         if tracker_data is None or tracker_activity is None or tracker_avg is None:
                             continue
+
+                        student_tg_id = int(data["chat_id"]) if str(data.get("chat_id")).lstrip('-').isdigit() else 0
+                        student_name = f"ID {student_tg_id}" if student_tg_id else f"Чат {data['chat_id']}"
+                        tariff = "—"
+
+                        if student_tg_id > 0:
+                            student_user = db.get_user(student_tg_id)
+                            if len(student_user) != 0:
+                                student_email = (student_user[0].get("email") or "").lower().strip()
+                                student_name = student_user[0].get("username") or student_name
+                                if student_email in config.USERS_ADDITIONAL_INFO:
+                                    tariff = config.USERS_ADDITIONAL_INFO[student_email].get("tariff") or "—"
                         
                         sheet_rows.append([tracker_data["tracker_name"], str(data["most_common_flow_in_chat"]), str(data["engagement_percent_in_chat"]), str(tracker_activity["chat_activity_score"]), "0" if tracker_avg["avg_response_seconds"] is None else str(tracker_avg["avg_response_seconds"]//3600)])
+
+                        try:
+                            db.upsert_tracker_personal_dashboard_daily(
+                                metric_date=datetime.date.today(),
+                                tracker_id=int(data["owner_id"]),
+                                tracker_name=tracker_data.get("tracker_name") or f"ID {data['owner_id']}",
+                                student_tg_id=student_tg_id,
+                                student_name=student_name,
+                                stream_id=str(data.get("most_common_flow_in_chat") or "—"),
+                                tariff=tariff,
+                                stream_start_date=None,
+                                week_number=1,
+                                avg_response_time_hours=float(tracker_avg.get("avg_response_hours") or 0),
+                                max_pause_minutes=0,
+                                initiative_percent=float(data.get("engagement_percent_in_chat") or 0),
+                                dialogs_count=int(data.get("total_messages_in_chat") or 0),
+                                fast_response_share_percent=float(tracker_avg.get("answer_rate_percent") or 0),
+                            )
+                        except Exception as upsert_error:
+                            print(f"Ошибка upsert tracker_personal_dashboard_daily: {upsert_error}")
                         
 
                     sheet_rows.reverse()

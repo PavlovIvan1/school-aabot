@@ -1049,3 +1049,31 @@ FROM student_messages
         self.cursor.execute("SELECT DISTINCT mail FROM users_access WHERE chat_id = %s", (tracker_chat_id,))
         rows = self.cursor.fetchall()
         return [row["mail"].lower().strip() for row in rows if row.get("mail")]
+
+    def get_users_emails_by_homework_chat_id(self, tracker_chat_id):
+        """Возвращает emails учеников, у которых ДЗ закреплено за chat_id трекера."""
+        self.cursor.execute(
+            """
+            SELECT DISTINCT u.email
+            FROM homework h
+            JOIN users u ON u.tg_id = h.tg_id
+            WHERE h.chat_id = %s AND u.email IS NOT NULL AND u.email != ''
+            """,
+            (tracker_chat_id,)
+        )
+        rows = self.cursor.fetchall()
+        return [row["email"].lower().strip() for row in rows if row.get("email")]
+
+    def get_users_emails_by_tracker_messages_chat_id(self, tracker_chat_id):
+        """Возвращает emails учеников, писавших в чат трекера (trackers_messages)."""
+        self.cursor.execute(
+            """
+            SELECT DISTINCT u.email
+            FROM trackers_messages tm
+            JOIN users u ON u.tg_id = tm.tg_id
+            WHERE tm.chat_id = %s AND u.email IS NOT NULL AND u.email != ''
+            """,
+            (tracker_chat_id,)
+        )
+        rows = self.cursor.fetchall()
+        return [row["email"].lower().strip() for row in rows if row.get("email")]
