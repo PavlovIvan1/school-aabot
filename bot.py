@@ -568,8 +568,25 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
     except Exception:
         users_flow = "—"
 
-    # Все обращения через чат (не ДЗ) отправляются в единый чат трекеров.
-    tracker_chat_candidates = [-1003691318994]
+    # Чат коммуникации с трекером берём из таблицы users (row[4] -> tracker_chat_id),
+    # которая хранится в config.USERS_ADDITIONAL_INFO.
+    # В users_access.chat_id лежит чат для ДЗ, его здесь использовать нельзя.
+    tracker_chat_candidates = []
+
+    tracker_chat_from_config = config.USERS_ADDITIONAL_INFO.get(user_email, {}).get("tracker_chat_id")
+    if tracker_chat_from_config is not None and str(tracker_chat_from_config).lstrip('-').isdigit():
+        tracker_chat_candidates.append(int(tracker_chat_from_config))
+
+    # Дедупликация
+    tracker_chat_candidates = list(dict.fromkeys(tracker_chat_candidates))
+
+    if len(tracker_chat_candidates) == 0:
+        await websocket.send_json({
+            "type": "error",
+            "message": "Не найден чат коммуникации трекера для пользователя. Проверьте tracker_chat_id в таблице users."
+        })
+        await websocket.close()
+        return
 
     tracker_chat_id = tracker_chat_candidates[0]
 
