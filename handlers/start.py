@@ -1182,10 +1182,11 @@ async def flapper(message: types.Message):
     if message.from_user.id not in config.ADMINS_LIST:
         return
     elif len(message.text.split()) != 3:
-        return await message.answer('Неправильная команда. Отправьте: /flapper TG_ID ID_урока или /flapper @username ID_урока')
+        return await message.answer('Неправильная команда. Отправьте: /flapper TG_ID ID_урока или /flapper @username ID_урока или /flapper email@example.com ID_урока')
     
     user_param = message.text.split()[1]
     lesson_id = message.text.split()[2]
+    user_data = []
     
     # Если передан @username, пробуем получить ID через Telegram API
     if user_param.startswith('@'):
@@ -1194,14 +1195,31 @@ async def flapper(message: types.Message):
             user_id = str(chat.id)
         except Exception as e:
             return await message.answer(f'Пользователь {user_param} не найден. Убедитесь, что бот когда-либо взаимодействовал с этим пользователем.')
+    elif '@' in user_param:
+        # Поиск по email
+        user_data = db.get_user_by_email(user_param.lower().strip())
+        if len(user_data) == 0:
+            return await message.answer('Пользователь не найден в базе данных')
+
+        tg_id = user_data[0].get('tg_id')
+        if tg_id is None or not str(tg_id).isdigit() or int(tg_id) == 0:
+            return await message.answer('У пользователя в базе не указан Telegram ID. Попросите пользователя написать боту /start, затем повторите команду.')
+
+        user_id = str(tg_id)
     else:
         user_id = user_param
     
-    user_data = db.get_user(user_id)
+    if len(user_data) == 0:
+        user_data = db.get_user(user_id)
+
     if len(user_data) == 0:
         return await message.answer('Пользователь не найден в базе данных')
 
-    users_flow = db.get_flow_by_email(user_data[0]['email'])
+    try:
+        users_flow = db.get_flow_by_email(user_data[0]['email'])
+    except Exception:
+        return await message.answer('Для пользователя не найден поток обучения (users_access).')
+
     lesson_data = db.get_lesson(lesson_id, users_flow)
 
     if lesson_data is None:

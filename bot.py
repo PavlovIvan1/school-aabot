@@ -476,27 +476,30 @@ async def handle_alice_request(request: Request):
 
             safe_message_text = message.get("message_text") or ""
             html_messages += f'<div class="message {message_from_type}" data-message-id="{message["message_id"]}">{safe_message_text}'
-            
-            if message["file_type"] == "photo":
-                file_info = await bot.get_file(message["file_id"])
-                file_path = f'static/{user_id}.jpg'
-                await bot.download_file(file_info.file_path, file_path)
-                html_messages += f'<img src="{file_path}">'
-            elif message["file_type"] in ["video", "video_note"]:
-                file_info = await bot.get_file(message["file_id"])
-                file_path = f'static/{user_id}.mp4'
-                await bot.download_file(file_info.file_path, file_path)
-                html_messages += f'<video controls><source src="{file_path}" type="video/mp4"></video>'
-            elif message["file_type"] in ["audio", "voice"]:
-                file_info = await bot.get_file(message["file_id"])
-                file_path = f'static/{user_id}.mp3'
-                await bot.download_file(file_info.file_path, file_path)
-                html_messages += f'<audio controls class="audio-player"><source src="{file_path}" type="audio/mpeg"></audio>'
-            elif message["file_type"] == "file":
-                file_info = await bot.get_file(message["file_id"])
-                file_path = f'static/{user_id}.{file_info.file_path.split(".")[-1]}'
-                await bot.download_file(file_info.file_path, file_path)
-                html_messages += f'<div class="file-attach"><div class="file-icon">📎</div><div>{file_path}</div></div>'
+
+            try:
+                if message["file_type"] == "photo":
+                    file_info = await bot.get_file(message["file_id"])
+                    file_path = f'static/{user_id}.jpg'
+                    await bot.download_file(file_info.file_path, file_path)
+                    html_messages += f'<img src="{file_path}">'
+                elif message["file_type"] in ["video", "video_note"]:
+                    file_info = await bot.get_file(message["file_id"])
+                    file_path = f'static/{user_id}.mp4'
+                    await bot.download_file(file_info.file_path, file_path)
+                    html_messages += f'<video controls><source src="{file_path}" type="video/mp4"></video>'
+                elif message["file_type"] in ["audio", "voice"]:
+                    file_info = await bot.get_file(message["file_id"])
+                    file_path = f'static/{user_id}.mp3'
+                    await bot.download_file(file_info.file_path, file_path)
+                    html_messages += f'<audio controls class="audio-player"><source src="{file_path}" type="audio/mpeg"></audio>'
+                elif message["file_type"] == "file":
+                    file_info = await bot.get_file(message["file_id"])
+                    file_path = f'static/{user_id}.{file_info.file_path.split(".")[-1]}'
+                    await bot.download_file(file_info.file_path, file_path)
+                    html_messages += f'<div class="file-attach"><div class="file-icon">📎</div><div>{file_path}</div></div>'
+            except Exception:
+                html_messages += '<div class="file-attach"><div class="file-icon">⚠️</div><div>Вложение временно недоступно</div></div>'
 
             html_messages += f'<div class="time">{message_date}</div></div>'
 
@@ -539,6 +542,17 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
         config.ws_connections[user_id].append(websocket)
 
     user_data = db.get_user(int(user_id))
+
+    if len(user_data) == 0:
+        # Фолбэк: пытаемся восстановить пользователя через link_access
+        link_access_rows = db.get_link_access_by_user_id(str(user_id))
+        if len(link_access_rows) != 0 and link_access_rows[0].get("email"):
+            try:
+                db.add_user(int(user_id), link_access_rows[0]["email"].lower())
+                user_data = db.get_user(int(user_id))
+            except Exception:
+                pass
+
     if len(user_data) == 0:
         await websocket.send_json({
             "type": "error",
@@ -554,28 +568,8 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
     except Exception:
         users_flow = "—"
 
-    tracker_chat_candidates = []
-
-    tracker_chat_from_config = config.USERS_ADDITIONAL_INFO.get(user_email, {}).get("tracker_chat_id")
-    if tracker_chat_from_config is not None and str(tracker_chat_from_config).lstrip('-').isdigit():
-        tracker_chat_candidates.append(int(tracker_chat_from_config))
-
-    try:
-        tracker_chat_from_access = db.get_chat_id(user_email)
-        if tracker_chat_from_access is not None and str(tracker_chat_from_access).lstrip('-').isdigit():
-            tracker_chat_candidates.append(int(tracker_chat_from_access))
-    except Exception:
-        pass
-
-    tracker_chat_candidates = list(dict.fromkeys(tracker_chat_candidates))
-
-    if len(tracker_chat_candidates) == 0:
-        await websocket.send_json({
-            "type": "error",
-            "message": "Не найден чат трекера для пользователя. Обратитесь в поддержку."
-        })
-        await websocket.close()
-        return
+    # Все обращения через чат (не ДЗ) отправляются в единый чат трекеров.
+    tracker_chat_candidates = [-1003691318994]
 
     tracker_chat_id = tracker_chat_candidates[0]
 
@@ -820,8 +814,14 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
 @app.get("/get_tracker_chats_list")
 async def handle_alice_request(request: Request):
     chat_id = int(str(request.url).split("chat_id=")[-1].split("&")[0].replace("%40", "@")) # TODO привести в нормальный вид
-    
-    db_users_list = db.get_users_by_tracker_chat_id(chat_id)
+
+    db_users_from_config = db.get_users_by_tracker_chat_id(chat_id)
+    db_users_from_access = db.get_users_access_emails_by_chat_id(chat_id)
+    db_users_list = list(dict.fromkeys([
+        str(email).lower().strip()
+        for email in (db_users_from_config + db_users_from_access)
+        if email
+    ]))
     html_messages = ''
 
     for db_user in db_users_list:

@@ -1043,3 +1043,9 @@ FROM student_messages
             if str(data['tracker_chat_id']) == str(tracker_chat_id):
                 users_list.append(user)
         return users_list
+
+    def get_users_access_emails_by_chat_id(self, tracker_chat_id):
+        """Возвращает emails учеников из users_access по chat_id трекера"""
+        self.cursor.execute("SELECT DISTINCT mail FROM users_access WHERE chat_id = %s", (tracker_chat_id,))
+        rows = self.cursor.fetchall()
+        return [row["mail"].lower().strip() for row in rows if row.get("mail")]
