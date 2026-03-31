@@ -177,29 +177,37 @@ class MySQL:
         return self.cursor.fetchone()"""
     
     def get_lesson(self, lesson_id, flow):
+        flow_value = str(flow).strip()
         for i in config.SHEETS_DATA["lessons"]:
-            if i["lesson_id"] == lesson_id and flow in i["flow"].split(","):
+            lesson_flows = [f.strip() for f in str(i.get("flow", "")).split(",") if f.strip()]
+            if i["lesson_id"] == lesson_id and flow_value in lesson_flows:
                 return i
-            
+             
         return None
     
     def get_lessons(self, module_id, flow):
         lessons = []
+        flow_value = str(flow).strip()
 
         for i in config.SHEETS_DATA["lessons"]:
-            if i["module_id"] == module_id and flow in i["flow"].split(","):
+            lesson_flows = [f.strip() for f in str(i.get("flow", "")).split(",") if f.strip()]
+            if i["module_id"] == module_id and flow_value in lesson_flows:
                 lessons.append(i)
         
         return sorted(lessons, key=lambda x: int(x["lesson_id"]))
     
     def get_module_name(self, lesson_id, flow):
+        flow_value = str(flow).strip()
         for i in config.SHEETS_DATA["lessons"]:
-            if i["lesson_id"] == lesson_id and flow in i["flow"].split(","):
-                return [self.get_module(i["module_id"]), i]
+            lesson_flows = [f.strip() for f in str(i.get("flow", "")).split(",") if f.strip()]
+            if i["lesson_id"] == lesson_id and flow_value in lesson_flows:
+                return [self.get_module(i["module_id"], flow_value), i]
     
     def get_module(self, module_id, flow):
+        flow_value = str(flow).strip()
         for i in config.SHEETS_DATA["modules"]:
-            if i["id"] == module_id and flow in i["flow"].split(","):
+            module_flows = [f.strip() for f in str(i.get("flow", "")).split(",") if f.strip()]
+            if i["id"] == module_id and flow_value in module_flows:
                 return i
             
     def get_required_homework_ids(self, flow):
