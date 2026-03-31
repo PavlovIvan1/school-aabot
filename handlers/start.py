@@ -11,7 +11,7 @@ from aiogram import BaseMiddleware
 from aiogram.types import InputMediaVideo, InputMediaDocument
 from aiogram.types import TelegramObject, FSInputFile
 from aiogram import types
-from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
+from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter, TelegramNetworkError
 import re
 
 import datetime
@@ -39,13 +39,21 @@ async def resolve_chat_owner(bot, chat_id: int, chat_name: str = "") -> Optional
         return cached.get("owner_id")
 
     try:
-        chat_admins = await bot.get_chat_administrators(chat_id)
+        chat_admins = await bot.get_chat_administrators(chat_id, request_timeout=7)
     except TelegramRetryAfter as e:
         # На flood-control ставим временную заглушку в кеш,
         # чтобы не долбить Telegram на каждом новом сообщении.
         CHAT_OWNER_CACHE[chat_id] = {
             "owner_id": cached.get("owner_id") if cached is not None else None,
             "expires_at": now_ts + max(int(e.retry_after), 5),
+        }
+        return CHAT_OWNER_CACHE[chat_id]["owner_id"]
+    except TelegramNetworkError:
+        # Временные сетевые ошибки Telegram (timeout/connect reset).
+        # Ставим короткий cooldown, чтобы не блокировать обработку апдейтов.
+        CHAT_OWNER_CACHE[chat_id] = {
+            "owner_id": cached.get("owner_id") if cached is not None else None,
+            "expires_at": now_ts + 30,
         }
         return CHAT_OWNER_CACHE[chat_id]["owner_id"]
     except TelegramBadRequest:
