@@ -2123,7 +2123,9 @@ async def check_info():
                 added_emails = []
                 deleted_by_time = [] # Удаленные почты по дате удаления
 
-                for row in table_2_data[1:]:
+                for idx, row in enumerate(table_2_data[1:], start=1):
+                    if idx % 25 == 0:
+                        await asyncio.sleep(0)
                     if row[0] is None or row[1] is None or row[2] is None or len(row[0]) == 0 or len(row[1]) == 0 or not is_int(row[1]) or len(row[2]) == 0:
                         continue
 
@@ -2179,7 +2181,9 @@ async def check_info():
                 deleted_emails = []
                 emails_list = [clean_string(row[0].lower().strip()) for row in table_2_data[1:]]
 
-                for user in db_data:
+                for idx, user in enumerate(db_data, start=1):
+                    if idx % 25 == 0:
+                        await asyncio.sleep(0)
                     if user['mail'].lower() not in emails_list:
                         users_list = db.get_user_by_email(user['mail'])
 
@@ -2215,7 +2219,9 @@ async def check_info():
 
                 modules_access_data = db.get_modules_access()
 
-                for row in table_2_data[1:]:
+                for idx, row in enumerate(table_2_data[1:], start=1):
+                    if idx % 25 == 0:
+                        await asyncio.sleep(0)
                     if row[0] is None or row[1] is None or row[2] is None or row[3] is None or len(row[0]) == 0 or len(row[1]) == 0 or len(row[3]) == 0 or not is_int(row[1]) or len(row[2]) == 0 or len(row[2].split('.')) != 3 or not is_int(row[3]):
                         continue
 
@@ -2252,7 +2258,9 @@ async def check_info():
                     continue
 
                 # Проверяем есть ли ячейка в переменной
-                for row in table_data_copy[1:]:
+                for idx, row in enumerate(table_data_copy[1:], start=1):
+                    if idx % 25 == 0:
+                        await asyncio.sleep(0)
                     row_dict = {}
 
                     n = 0
@@ -2268,7 +2276,9 @@ async def check_info():
                 rows_to_delete = []
 
                 # Проверяем есть ли ячейка в гугл-таблице
-                for row in config.SHEETS_DATA[key]:
+                for idx, row in enumerate(config.SHEETS_DATA[key], start=1):
+                    if idx % 25 == 0:
+                        await asyncio.sleep(0)
                     if list(row.values()) not in table_data_copy[1:]:
                         rows_to_delete.append(row)
                         print(f'Удалено: {list(row.values())}//{table_data_copy[1:]}')
@@ -2284,7 +2294,9 @@ async def check_info():
                 table_2 = await ss_2.get_worksheet_by_id(0)
                 table_2_data = await table_2.get_all_values()
 
-                for row in table_2_data[1:]:
+                for idx, row in enumerate(table_2_data[1:], start=1):
+                    if idx % 25 == 0:
+                        await asyncio.sleep(0)
                     if row[0] is None or row[1] is None or row[2] is None or len(row[0]) == 0 or len(row[1]) == 0 or not is_int(row[1]) or len(row[2]) == 0:
                         continue
                     
@@ -2309,7 +2321,9 @@ async def check_info():
                     homework_data = db.get_all_homeworks()
                     print(f'Кол-во заданий: {len(homework_data)}')
 
-                    for homework in homework_data:
+                    for idx, homework in enumerate(homework_data, start=1):
+                        if idx % 50 == 0:
+                            await asyncio.sleep(0)
                         homework_time_name = ".".join(reversed(homework['update_time'].split()[0].split('-')[:2]))
 
                         if homework_time_name not in homework_dict:
@@ -2321,7 +2335,9 @@ async def check_info():
                     worksheet_names = [worksheet.title for worksheet in homework_worksheets]
                     worksheet_ids = {worksheet.title: worksheet.id for worksheet in homework_worksheets}
 
-                    for homework_time in homework_dict:
+                    for idx, homework_time in enumerate(homework_dict, start=1):
+                        if idx % 10 == 0:
+                            await asyncio.sleep(0)
                         if homework_time in worksheet_names:
                             ws_3 = await ss.get_worksheet_by_id(worksheet_ids[homework_time])
                         else:
@@ -2347,7 +2363,9 @@ async def check_info():
                     psychologist_questions.reverse()
                     print(f'Кол-во вопросов: {len(psychologist_questions)}')
 
-                    for item in psychologist_questions:
+                    for idx, item in enumerate(psychologist_questions, start=1):
+                        if idx % 50 == 0:
+                            await asyncio.sleep(0)
                         items_list.append([item['user_data'], item['email'], item['question'], item['message_link'], item['time']])
 
                     rs = await ws_4.append_rows(items_list)
@@ -2365,7 +2383,9 @@ async def check_info():
                     table_3 = await ss_2.get_worksheet_by_id(423528932)
                     table_3_data = await table_3.get_all_values()
 
-                    for row in table_3_data[1:]:
+                    for idx, row in enumerate(table_3_data[1:], start=1):
+                        if idx % 25 == 0:
+                            await asyncio.sleep(0)
                         if row[1] not in trackers_data:
                             trackers_data[row[1]] = row[0]
                         
@@ -2389,7 +2409,9 @@ async def check_info():
                     checked_homework_list = []
                     users_in_db = db.get_all_users_ids()
 
-                    for homework in homework_data:
+                    for idx, homework in enumerate(homework_data, start=1):
+                        if idx % 50 == 0:
+                            await asyncio.sleep(0)
                         if homework['tg_id'] not in users_in_db:
                             continue
                         
@@ -2428,7 +2450,9 @@ async def check_info():
                     sheet_rows = [] # ФИО ментора, Номер потока, Вовлеченность ментора, Активность чата, время ответа ментора     
                     engagement_data = db.get_mentors_engagement()
 
-                    for data in engagement_data:
+                    for idx, data in enumerate(engagement_data, start=1):
+                        if idx % 25 == 0:
+                            await asyncio.sleep(0)
                         mentor_data = db.get_mentor_by_id(data["owner_id"])
                         mentor_activity = db.get_mentor_activity(data["chat_id"])
                         mentor_avg = db.get_mentor_avg_response_time(data["chat_id"], data["owner_id"])
@@ -2529,7 +2553,15 @@ async def check_info():
             await asyncio.sleep(180)
 
 async def on_startup():
-    asyncio.create_task(check_info())
+    # Тяжелый фоновый цикл (Google Sheets + массовые DB-операции)
+    # может периодически забивать event-loop и задерживать ответы бота.
+    # По запросу включаем по умолчанию; для аварийного режима можно отключить
+    # через DISABLE_BACKGROUND_SYNC=1.
+    if os.getenv("DISABLE_BACKGROUND_SYNC", "0") != "1":
+        asyncio.create_task(check_info())
+        print("[BOOT] background sync started")
+    else:
+        print("[BOOT] background sync disabled by DISABLE_BACKGROUND_SYNC=1")
 
 async def set_default_commands(bot):
     await bot.set_my_commands([
