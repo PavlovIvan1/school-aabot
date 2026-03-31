@@ -40,6 +40,7 @@ db = MySQL()
 
 bot = Bot(token=config.BOT_TOKEN, default=DefaultBotProperties(link_preview_is_disabled=True))
 web_process = None
+sync_process = None
 
 
 def get_creds():
@@ -2021,6 +2022,29 @@ def _stop_web_process():
         pass
 
 
+def _stop_sync_process():
+    global sync_process
+    if sync_process is None:
+        return
+    try:
+        sync_process.terminate()
+    except Exception:
+        pass
+
+
+def start_sync_process_managed():
+    global sync_process
+
+    # Не запускаем воркер из самого воркера
+    if os.getenv("CHECK_INFO_WORKER", "0") == "1":
+        return
+
+    env = os.environ.copy()
+    env["CHECK_INFO_WORKER"] = "1"
+    sync_process = subprocess.Popen(["python3", "bot.py"], env=env)
+    atexit.register(_stop_sync_process)
+
+
 def start_web_process_managed():
     global web_process
 
@@ -2553,15 +2577,9 @@ async def check_info():
             await asyncio.sleep(180)
 
 async def on_startup():
-    # Тяжелый фоновый цикл (Google Sheets + массовые DB-операции)
-    # может периодически забивать event-loop и задерживать ответы бота.
-    # По запросу включаем по умолчанию; для аварийного режима можно отключить
-    # через DISABLE_BACKGROUND_SYNC=1.
-    if os.getenv("DISABLE_BACKGROUND_SYNC", "0") != "1":
-        asyncio.create_task(check_info())
-        print("[BOOT] background sync started")
-    else:
-        print("[BOOT] background sync disabled by DISABLE_BACKGROUND_SYNC=1")
+    # check_info вынесен в отдельный процесс-воркер,
+    # чтобы не блокировать event-loop polling.
+    pass
 
 async def set_default_commands(bot):
     await bot.set_my_commands([
@@ -2570,6 +2588,12 @@ async def set_default_commands(bot):
 
 async def main() -> None:
     # Dispatcher is a root router
+
+    # Режим отдельного воркера синхронизации (без polling)
+    if os.getenv("CHECK_INFO_WORKER", "0") == "1":
+        print("[BOOT] CHECK_INFO_WORKER=1 -> run check_info only")
+        await check_info()
+        return
 
     if config.TESTING_MODE:
         storage = MemoryStorage()
@@ -2600,6 +2624,13 @@ async def main() -> None:
     # Если нужно старое поведение "всё в одном", можно запустить с EMBED_WEB_SERVER=1.
     if os.getenv("EMBED_WEB_SERVER", "0") == "1":
         start_web_process_managed()
+
+    # Запускаем sync-воркер отдельным процессом, если не отключено явно.
+    if os.getenv("DISABLE_BACKGROUND_SYNC", "0") != "1":
+        start_sync_process_managed()
+        print("[BOOT] background sync worker started")
+    else:
+        print("[BOOT] background sync disabled by DISABLE_BACKGROUND_SYNC=1")
 
     await on_startup()
 
