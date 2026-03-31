@@ -14,6 +14,7 @@ from aiogram.exceptions import TelegramBadRequest
 
 import datetime
 import asyncio
+import json
 from typing import Dict, Any, Callable, Awaitable
 import time
 import math
@@ -27,6 +28,16 @@ import database
 import config
 
 db = database.MySQL()
+
+
+def load_users_additional_info_from_file() -> None:
+    try:
+        with open("users_additional_info.json", "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, dict):
+                config.USERS_ADDITIONAL_INFO = data
+    except Exception:
+        pass
 
 
 async def add_user_to_spreadsheet(user_id: int, email: str, flow: str, bot):
@@ -154,6 +165,10 @@ async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
 
     # Добавляем пользователя в Google Таблицу если его там нет
     await add_user_to_spreadsheet(call.from_user.id, user_data[0]['email'], users_flow, call.bot)
+
+    if email_key not in config.USERS_ADDITIONAL_INFO or len(config.USERS_ADDITIONAL_INFO[email_key]["tracker_chat_id"]) == 0:
+        # sync_worker обновляет кэш в отдельном процессе — пробуем подтянуть файл
+        load_users_additional_info_from_file()
 
     if email_key not in config.USERS_ADDITIONAL_INFO or len(config.USERS_ADDITIONAL_INFO[email_key]["tracker_chat_id"]) == 0:
         await call.answer("Вам не назначен личный трекер, обратитесь в поддержку", show_alert=True)

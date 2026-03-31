@@ -33,7 +33,7 @@ tmux new -d -s aabot-bot 'cd /root/dev_bot && export DISABLE_BACKGROUND_SYNC=1 &
 tmux capture-pane -pt aabot-bot | tail -n 40
 ```
 
-## 3) Сессия для синка/метрик (воркер)
+## 3) Сессия для sync-логики (без метрик)
 
 ```bash
 tmux new -d -s aabot-sync 'cd /root/dev_bot && python sync_worker.py'
@@ -45,7 +45,19 @@ tmux new -d -s aabot-sync 'cd /root/dev_bot && python sync_worker.py'
 tmux capture-pane -pt aabot-sync | tail -n 80
 ```
 
-## 4) Полезные команды
+## 4) Сессия для метрик дашбордов (отдельно)
+
+```bash
+tmux new -d -s aabot-metrics 'cd /root/dev_bot && python metrics_worker.py'
+```
+
+Проверка:
+
+```bash
+tmux capture-pane -pt aabot-metrics | tail -n 80
+```
+
+## 5) Полезные команды
 
 Список сессий:
 
@@ -63,6 +75,10 @@ tmux attach -t aabot-bot
 tmux attach -t aabot-sync
 ```
 
+```bash
+tmux attach -t aabot-metrics
+```
+
 Отключиться от сессии: `Ctrl+b`, затем `d`.
 
 Остановить конкретную сессию:
@@ -75,8 +91,13 @@ tmux kill-session -t aabot-bot
 tmux kill-session -t aabot-sync
 ```
 
+```bash
+tmux kill-session -t aabot-metrics
+```
+
 ## Что это даёт
 
 - `aabot-bot` отвечает пользователям (`/start`, кнопки) без блокировок тяжёлым циклом.
-- `aabot-sync` отдельно считает синхронизацию и дашбордные метрики.
+- `aabot-sync` считает только sync-логику (пользователи/кэш).
+- `aabot-metrics` считает только метрики дашбордов.
 - Падение/тормоза синка не валят пользовательский бот.

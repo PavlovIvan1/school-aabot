@@ -5,6 +5,7 @@ PROJECT_DIR="/root/dev_bot"
 BOT_SESSION="aabot-bot"
 SYNC_SESSION="aabot-sync"
 WEB_SESSION="aabot-web"
+METRICS_SESSION="aabot-metrics"
 
 # Можно переопределить через env при запуске скрипта
 WEB_HOST="${WEB_HOST:-0.0.0.0}"
@@ -16,10 +17,12 @@ echo "[stack] stop old tmux sessions (if any)"
 tmux kill-session -t "$BOT_SESSION" 2>/dev/null || true
 tmux kill-session -t "$SYNC_SESSION" 2>/dev/null || true
 tmux kill-session -t "$WEB_SESSION" 2>/dev/null || true
+tmux kill-session -t "$METRICS_SESSION" 2>/dev/null || true
 
 echo "[stack] stop orphan python/uvicorn processes"
 pkill -f "python bot.py" 2>/dev/null || true
 pkill -f "python sync_worker.py" 2>/dev/null || true
+pkill -f "python metrics_worker.py" 2>/dev/null || true
 pkill -f "uvicorn bot:app" 2>/dev/null || true
 
 sleep 1
@@ -29,6 +32,9 @@ tmux new -d -s "$BOT_SESSION" "cd $PROJECT_DIR && python bot.py"
 
 echo "[stack] start sync session: $SYNC_SESSION"
 tmux new -d -s "$SYNC_SESSION" "cd $PROJECT_DIR && python sync_worker.py"
+
+echo "[stack] start metrics session: $METRICS_SESSION"
+tmux new -d -s "$METRICS_SESSION" "cd $PROJECT_DIR && python metrics_worker.py"
 
 echo "[stack] start web session: $WEB_SESSION"
 tmux new -d -s "$WEB_SESSION" "cd $PROJECT_DIR && python -m uvicorn bot:app --host $WEB_HOST --port $WEB_PORT --ssl-keyfile $SSL_KEYFILE --ssl-certfile $SSL_CERTFILE"
@@ -44,5 +50,8 @@ tmux capture-pane -pt "$SYNC_SESSION" | tail -n 20 || true
 
 echo "[stack] tail web logs:"
 tmux capture-pane -pt "$WEB_SESSION" | tail -n 20 || true
+
+echo "[stack] tail metrics logs:"
+tmux capture-pane -pt "$METRICS_SESSION" | tail -n 20 || true
 
 echo "[stack] done"

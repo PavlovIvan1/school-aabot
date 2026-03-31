@@ -16,6 +16,7 @@ import re
 
 import datetime
 import asyncio
+import json
 import traceback
 from typing import Dict, Any, Callable, Awaitable, Optional
 import time
@@ -29,6 +30,16 @@ import config
 
 db = database.MySQL()
 CHAT_OWNER_CACHE: Dict[int, Dict[str, Any]] = {}
+
+
+def load_users_additional_info_from_file() -> None:
+    try:
+        with open("users_additional_info.json", "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, dict):
+                config.USERS_ADDITIONAL_INFO = data
+    except Exception:
+        pass
 
 
 async def resolve_chat_owner(bot, chat_id: int, chat_name: str = "") -> Optional[int]:
@@ -726,6 +737,9 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
 async def command_start_handler(call: CallbackQuery) -> None:
     user_data = db.get_user(call.from_user.id)
     email_key = user_data[0]["email"].lower().strip()
+
+    if email_key not in config.USERS_ADDITIONAL_INFO or config.USERS_ADDITIONAL_INFO[email_key]["tariff"] is None or len(config.USERS_ADDITIONAL_INFO[email_key]["tariff"]) == 0:
+        load_users_additional_info_from_file()
 
     if email_key not in config.USERS_ADDITIONAL_INFO or config.USERS_ADDITIONAL_INFO[email_key]["tariff"] is None or len(config.USERS_ADDITIONAL_INFO[email_key]["tariff"]) == 0:
         await call.answer("У вас не указан тариф, обратитесь в поддержку", show_alert=True)

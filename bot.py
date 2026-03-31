@@ -43,6 +43,24 @@ web_process = None
 sync_process = None
 
 
+def dump_users_additional_info() -> None:
+    try:
+        with open("users_additional_info.json", "w", encoding="utf-8") as f:
+            json.dump(config.USERS_ADDITIONAL_INFO, f, ensure_ascii=False)
+    except Exception as e:
+        print(f"[SYNC] failed to dump users_additional_info.json: {e}")
+
+
+def load_users_additional_info() -> None:
+    try:
+        with open("users_additional_info.json", "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, dict):
+                config.USERS_ADDITIONAL_INFO = data
+    except Exception:
+        pass
+
+
 def get_creds():
     creds = Credentials.from_service_account_file("credentials.json")
     scoped = creds.with_scopes([
@@ -2113,6 +2131,7 @@ async def check_info():
             
             email_key = clean_string(row[0].lower().strip())
             config.USERS_ADDITIONAL_INFO[email_key] = {"homework_chat_id": row[1], "tracker_chat_id": row[4], "tariff": row[5]}
+        dump_users_additional_info()
     except Exception as e:
         print(f"Ошибка при обновлении: {e}")
         await asyncio.sleep(2)
@@ -2143,7 +2162,7 @@ async def check_info():
             continue
         
         try:
-            if not config.TESTING_MODE:
+            if os.getenv("METRICS_ONLY", "0") != "1" and not config.TESTING_MODE:
                 # Обновление юзеров
                 db_data = db.get_all_user_access_data()
                 added_emails = []
@@ -2237,7 +2256,7 @@ async def check_info():
 
                 await asyncio.sleep(2)
 
-            if not config.TESTING_MODE: # TODO глянуть чета не то было, спам пошел добавлением потоков
+            if os.getenv("METRICS_ONLY", "0") != "1" and not config.TESTING_MODE: # TODO глянуть чета не то было, спам пошел добавлением потоков
                 # Обновление времени потоков (modules_access)
                 table_2 = await ss_2.get_worksheet_by_id(632094276)
                 table_2_data = await table_2.get_all_values()
@@ -2272,7 +2291,8 @@ async def check_info():
                 await asyncio.sleep(2)
 
             # Обновление заданий
-            for key, value in config.SHEET_IDS.items():
+            if os.getenv("METRICS_ONLY", "0") != "1":
+                for key, value in config.SHEET_IDS.items():
                 await asyncio.sleep(1)
                 try:
                     table = await ss.get_worksheet_by_id(value)
@@ -2316,28 +2336,30 @@ async def check_info():
             await asyncio.sleep(2)
 
             # Обновление ID чатов трекеров (ЛС трекеров)
-            try:
-                table_2 = await ss_2.get_worksheet_by_id(0)
-                table_2_data = await table_2.get_all_values()
+            if os.getenv("METRICS_ONLY", "0") != "1":
+                try:
+                    table_2 = await ss_2.get_worksheet_by_id(0)
+                    table_2_data = await table_2.get_all_values()
 
-                for idx, row in enumerate(table_2_data[1:], start=1):
-                    if idx % 25 == 0:
-                        await asyncio.sleep(0)
-                    if row[0] is None or row[1] is None or row[2] is None or len(row[0]) == 0 or len(row[1]) == 0 or not is_int(row[1]) or len(row[2]) == 0:
-                        continue
-                    
-                    email_key = clean_string(row[0].lower().strip())
-                    if email_key not in config.USERS_ADDITIONAL_INFO or row[1] != config.USERS_ADDITIONAL_INFO[email_key].get("homework_chat_id", "") or row[4] != config.USERS_ADDITIONAL_INFO[email_key]["tracker_chat_id"] or row[5] != config.USERS_ADDITIONAL_INFO[email_key]["tariff"]: # TODO оптимизировать
-                        config.USERS_ADDITIONAL_INFO[email_key] = {"homework_chat_id": row[1], "tracker_chat_id": row[4], "tariff": row[5]}
-                        print(f'Добавлено в ЛС трекеров: {row}')
-                    
-            except Exception as e:
-                print(f"Ошибка при обновлении: {e}")
-                await asyncio.sleep(2)
+                    for idx, row in enumerate(table_2_data[1:], start=1):
+                        if idx % 25 == 0:
+                            await asyncio.sleep(0)
+                        if row[0] is None or row[1] is None or row[2] is None or len(row[0]) == 0 or len(row[1]) == 0 or not is_int(row[1]) or len(row[2]) == 0:
+                            continue
+                        
+                        email_key = clean_string(row[0].lower().strip())
+                        if email_key not in config.USERS_ADDITIONAL_INFO or row[1] != config.USERS_ADDITIONAL_INFO[email_key].get("homework_chat_id", "") or row[4] != config.USERS_ADDITIONAL_INFO[email_key]["tracker_chat_id"] or row[5] != config.USERS_ADDITIONAL_INFO[email_key]["tariff"]: # TODO оптимизировать
+                            config.USERS_ADDITIONAL_INFO[email_key] = {"homework_chat_id": row[1], "tracker_chat_id": row[4], "tariff": row[5]}
+                            print(f'Добавлено в ЛС трекеров: {row}')
+                    dump_users_additional_info()
+                        
+                except Exception as e:
+                    print(f"Ошибка при обновлении: {e}")
+                    await asyncio.sleep(2)
             
             #print(f'config.SHEETS_DATA (clear cache): {config.SHEETS_DATA}')
             
-            if time.time() > time_to_clear: # TODO добавить and not config.TESTING_MODE, сделано на время разработки
+            if os.getenv("METRICS_ONLY", "0") != "1" and time.time() > time_to_clear: # TODO добавить and not config.TESTING_MODE, сделано на время разработки
                 print("Обновляю список ДЗ")
                 msg = await bot.send_message(config.LOG_CHAT_ID, f'⚠️ Обновляю список ДЗ. До завершения обновления не будет работать обновление пользователей в гугл таблице')
 
@@ -2403,7 +2425,7 @@ async def check_info():
                     await asyncio.sleep(2)
                     continue
             
-            if time.time() > time_to_update_trackers:
+            if os.getenv("METRICS_ONLY", "0") != "1" and time.time() > time_to_update_trackers:
                 time_to_update_trackers = time.time() + 2200
 
                 try:
@@ -2597,6 +2619,9 @@ async def main() -> None:
         print("[BOOT] CHECK_INFO_WORKER=1 -> run check_info only")
         await check_info()
         return
+
+    # Подтягиваем актуальный кэш назначений, который пишет sync_worker.
+    load_users_additional_info()
 
     # В обычном (polling) процессе не ждём check_info,
     # иначе при вынесенном sync-воркере middlewares могут вечно отвечать
