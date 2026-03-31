@@ -31,7 +31,7 @@ db = database.MySQL()
 CHAT_OWNER_CACHE: Dict[int, Dict[str, Any]] = {}
 
 
-async def resolve_chat_owner(bot, chat_id: int) -> Optional[int]:
+async def resolve_chat_owner(bot, chat_id: int, chat_name: str = "") -> Optional[int]:
     now_ts = time.time()
     cached = CHAT_OWNER_CACHE.get(chat_id)
 
@@ -40,10 +40,21 @@ async def resolve_chat_owner(bot, chat_id: int) -> Optional[int]:
 
     try:
         chat_admins = await bot.get_chat_administrators(chat_id)
-        chat_name = (await bot.get_chat(chat_id)).full_name or ""
-    except (TelegramBadRequest, TelegramRetryAfter):
+    except TelegramRetryAfter as e:
+        # На flood-control ставим временную заглушку в кеш,
+        # чтобы не долбить Telegram на каждом новом сообщении.
+        CHAT_OWNER_CACHE[chat_id] = {
+            "owner_id": cached.get("owner_id") if cached is not None else None,
+            "expires_at": now_ts + max(int(e.retry_after), 5),
+        }
+        return CHAT_OWNER_CACHE[chat_id]["owner_id"]
+    except TelegramBadRequest:
         # Если Telegram дал flood-control или чат не подходит для запроса,
         # просто пропускаем этот апдейт без исключения.
+        CHAT_OWNER_CACHE[chat_id] = {
+            "owner_id": None,
+            "expires_at": now_ts + 60,
+        }
         return None
 
     owner_id = None
@@ -1489,7 +1500,11 @@ async def message_reaction_handler(message_reaction: types.MessageReactionUpdate
     if message_data is None:
         return
 
-    owner_id = await resolve_chat_owner(message_reaction.bot, message_reaction.chat.id)
+    owner_id = await resolve_chat_owner(
+        message_reaction.bot,
+        message_reaction.chat.id,
+        message_reaction.chat.full_name or message_reaction.chat.title or "",
+    )
 
     if owner_id is None:
         return
@@ -1507,7 +1522,11 @@ async def command_start_handler(message: Message) -> None:
     # Обработка системы метрик
     if message.chat.type in ('group', 'supergroup') and message.chat.id not in support_chat_ids and message.chat.id != config.PSYHOLOGIST_CHAT_ID and message.chat.id not in chat_ids_list and str(message.chat.id) not in trackers_chats:
         chat_type = None
-        owner_id = await resolve_chat_owner(message.bot, message.chat.id)
+        owner_id = await resolve_chat_owner(
+            message.bot,
+            message.chat.id,
+            message.chat.full_name or message.chat.title or "",
+        )
         if owner_id is not None:
             chat_type = 'mentor'
         
