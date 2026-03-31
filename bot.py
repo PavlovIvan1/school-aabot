@@ -2596,6 +2596,11 @@ async def main() -> None:
         await check_info()
         return
 
+    # В обычном (polling) процессе не ждём check_info,
+    # иначе при вынесенном sync-воркере middlewares могут вечно отвечать
+    # "бот перезагружается" из-за BOT_IS_READY=False.
+    config.BOT_IS_READY = True
+
     if config.TESTING_MODE:
         storage = MemoryStorage()
     else:
