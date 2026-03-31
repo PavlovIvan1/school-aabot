@@ -2557,6 +2557,13 @@ async def main() -> None:
 
     await set_default_commands(bot)
 
+    # Для polling-режима очищаем накопившиеся апдейты,
+    # чтобы после перезапуска не прилетал «залп» старых /start и callback.
+    try:
+        await bot.delete_webhook(drop_pending_updates=True)
+    except Exception:
+        pass
+
     # По умолчанию web-сервер запускается отдельно (вторым процессом/tmux).
     # Если нужно старое поведение "всё в одном", можно запустить с EMBED_WEB_SERVER=1.
     if os.getenv("EMBED_WEB_SERVER", "0") == "1":
@@ -2565,7 +2572,7 @@ async def main() -> None:
     await on_startup()
 
     # And the run events dispatching
-    await dp.start_polling(bot)
+    await dp.start_polling(bot, handle_as_tasks=True)
 
 
 if __name__ == "__main__":
