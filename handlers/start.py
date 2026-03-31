@@ -220,6 +220,11 @@ class SecondSubMiddleware(BaseMiddleware):
         event: TelegramObject,
         data: Dict[str, Any]
     ) -> Any:
+        try:
+            print(f"[MSG] uid={event.from_user.id} chat_id={event.chat.id} type={event.chat.type} text={event.text}")
+        except Exception:
+            pass
+
         user_data = db.get_user(event.from_user.id)
         
         if len(user_data) == 0 and event.text != '/skip_state' and event.chat.id > 0 and event.text != '/start' and 'state' not in data:
