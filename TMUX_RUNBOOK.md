@@ -36,7 +36,7 @@ tmux capture-pane -pt aabot-bot | tail -n 40
 ## 3) Сессия для синка/метрик (воркер)
 
 ```bash
-tmux new -d -s aabot-sync 'cd /root/dev_bot && export CHECK_INFO_WORKER=1 && export ENABLE_METRICS_SYNC=1 && python bot.py'
+tmux new -d -s aabot-sync 'cd /root/dev_bot && python sync_worker.py'
 ```
 
 Проверка:
