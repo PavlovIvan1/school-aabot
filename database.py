@@ -6,8 +6,18 @@ import time
 class MySQL:
 
     def __init__(self):
-        self.database = mysql.connector.connect(user=config.DATABASE_USER, password=config.DATABASE_PASSWORD, host=config.DATABASE_IP, database=config.DATABASE_NAME, autocommit=True)
-        self.cursor = self.database.cursor(dictionary=True)
+        self.database = mysql.connector.connect(
+            user=config.DATABASE_USER,
+            password=config.DATABASE_PASSWORD,
+            host=config.DATABASE_IP,
+            database=config.DATABASE_NAME,
+            autocommit=True,
+            consume_results=True,
+        )
+        # buffered=True + consume_results=True критично для текущей архитектуры,
+        # где один курсор используется в разных обработчиках (aiogram + FastAPI WS).
+        # Это снижает риск mysql.connector.errors.InternalError: Unread result found
+        self.cursor = self.database.cursor(dictionary=True, buffered=True)
         self.cursor.execute("SET SESSION wait_timeout=31536000")
 
         self.cursor.execute("""CREATE TABLE IF NOT EXISTS trackers_messages (
