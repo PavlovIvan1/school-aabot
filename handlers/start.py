@@ -272,6 +272,7 @@ async def send_media_group(chat_id: int, bot):
 
 @start_router.message(CommandStart())
 async def command_start_handler(message: Message, state: FSMContext) -> None:
+    print(f"[START] uid={message.from_user.id} chat_id={message.chat.id} chat_type={message.chat.type} text={message.text}")
     await state.clear()
 
     support_chat_ids = [int(support_chat["support_chat_id"]) for support_chat in db.get_support_chats() if support_chat.get("support_chat_id")]
@@ -287,6 +288,7 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
         # In groups/supergroups do not start email onboarding flow.
         # This prevents trackers/support from being stuck in GetAccess.email state.
         if message.chat.type != 'private':
+            print(f"[START] skip non-private for new user uid={message.from_user.id}")
             return
 
         start_args = None if len(message.text.split()) == 1 else "".join(message.text.split()[1:])
@@ -302,6 +304,7 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
 Чтобы открыть тебе доступ, напиши, пожалуйста, свою электронную почту, которая была указана при покупке обучения. Мы проверим тебя в списке учеников и сразу подключим к материалам 🚀
 
 Напиши свою почту 👇''', reply_markup=keyboard.main_keyboard(include_dashboards=is_staff))
+            print(f"[START] ask email uid={message.from_user.id}")
             
             return
         elif len(link_access_data) != 0:
@@ -326,6 +329,7 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
 Чтобы открыть тебе доступ, напиши, пожалуйста, свою электронную почту, которая была указана при покупке обучения. Мы проверим тебя в списке учеников и сразу подключим к материалам 🚀
 
 Напиши свою почту 👇''', reply_markup=keyboard.main_keyboard(include_dashboards=is_staff))
+            print(f"[START] ask email (bad quick link) uid={message.from_user.id}")
             
             await message.bot.send_message(config.LOG_CHAT_ID, f'Не удалось найти информацию по быстрой ссылке: {message.from_user.full_name} @{message.from_user.username} (ID: {message.from_user.id})\nАргументы: {start_args}')
             return
@@ -334,18 +338,40 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
     # чтобы /start отвечал мгновенно без риска подвисаний на БД.
     has_tracker_unread = False
 
+    welcome_text = """Рады видеть тебя в обучении «Заработок на Reels»📱
+
+Здесь твои домашние задания, связь с личным трекером и поддержкой. Всё в одном месте — удобно и без лишних поисков
+
+Выбирай нужный раздел ниже и нажимай на кнопку👇"""
+
     try:
-        await message.answer_photo(photo=FSInputFile("files/start.jpg"), caption="""Рады видеть тебя в обучении «Заработок на Reels»📱
-
-Здесь твои домашние задания, связь с личным трекером и поддержкой. Всё в одном месте — удобно и без лишних поисков
-
-Выбирай нужный раздел ниже и нажимай на кнопку👇""", reply_markup=keyboard.main_keyboard(include_dashboards=is_staff, has_tracker_unread=has_tracker_unread))
-    except TelegramRetryAfter:
-        await message.answer("""Рады видеть тебя в обучении «Заработок на Reels»📱
-
-Здесь твои домашние задания, связь с личным трекером и поддержкой. Всё в одном месте — удобно и без лишних поисков
-
-Выбирай нужный раздел ниже и нажимай на кнопку👇""", reply_markup=keyboard.main_keyboard(include_dashboards=is_staff, has_tracker_unread=has_tracker_unread))
+        await message.answer_photo(
+            photo=FSInputFile("files/start.jpg"),
+            caption=welcome_text,
+            reply_markup=keyboard.main_keyboard(include_dashboards=is_staff, has_tracker_unread=has_tracker_unread),
+        )
+        print(f"[START] welcome(photo) sent uid={message.from_user.id}")
+    except TelegramRetryAfter as e:
+        await asyncio.sleep(max(int(e.retry_after), 1))
+        try:
+            await message.answer(
+                welcome_text,
+                reply_markup=keyboard.main_keyboard(include_dashboards=is_staff, has_tracker_unread=has_tracker_unread),
+            )
+            print(f"[START] welcome(text after retry) sent uid={message.from_user.id}")
+        except Exception:
+            print(f"[START] failed after retry uid={message.from_user.id}\n{traceback.format_exc()}")
+            pass
+    except (TelegramNetworkError, FileNotFoundError):
+        try:
+            await message.answer(
+                welcome_text,
+                reply_markup=keyboard.main_keyboard(include_dashboards=is_staff, has_tracker_unread=has_tracker_unread),
+            )
+            print(f"[START] welcome(text fallback) sent uid={message.from_user.id}")
+        except Exception:
+            print(f"[START] fallback failed uid={message.from_user.id}\n{traceback.format_exc()}")
+            pass
 
 
 @start_router.callback_query(F.data == 'main')
