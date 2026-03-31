@@ -29,15 +29,30 @@ sleep 1
 
 echo "[stack] start bot session: $BOT_SESSION"
 tmux new -d -s "$BOT_SESSION" "cd $PROJECT_DIR && python bot.py"
+tmux set-option -t "$BOT_SESSION" remain-on-exit on
 
 echo "[stack] start sync session: $SYNC_SESSION"
 tmux new -d -s "$SYNC_SESSION" "cd $PROJECT_DIR && python sync_worker.py"
+tmux set-option -t "$SYNC_SESSION" remain-on-exit on
 
 echo "[stack] start metrics session: $METRICS_SESSION"
 tmux new -d -s "$METRICS_SESSION" "cd $PROJECT_DIR && python metrics_worker.py"
+tmux set-option -t "$METRICS_SESSION" remain-on-exit on
 
 echo "[stack] start web session: $WEB_SESSION"
 tmux new -d -s "$WEB_SESSION" "cd $PROJECT_DIR && python -m uvicorn bot:app --host $WEB_HOST --port $WEB_PORT --ssl-keyfile $SSL_KEYFILE --ssl-certfile $SSL_CERTFILE"
+tmux set-option -t "$WEB_SESSION" remain-on-exit on
+
+sleep 2
+
+echo "[stack] session health"
+for s in "$BOT_SESSION" "$SYNC_SESSION" "$METRICS_SESSION" "$WEB_SESSION"; do
+  if tmux has-session -t "$s" 2>/dev/null; then
+    echo "  - $s: UP"
+  else
+    echo "  - $s: DOWN"
+  fi
+done
 
 echo "[stack] sessions:"
 tmux ls || true
