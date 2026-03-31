@@ -2293,45 +2293,45 @@ async def check_info():
             # Обновление заданий
             if os.getenv("METRICS_ONLY", "0") != "1":
                 for key, value in config.SHEET_IDS.items():
-                await asyncio.sleep(1)
-                try:
-                    table = await ss.get_worksheet_by_id(value)
-                    table_data = await table.get_all_values()
-                    table_data_copy = [row[:len(config.SHEETS_COLUMNS[key])] for row in table_data]
-                except Exception as e:
-                    print(f"Ошибка при обновлении: {e}")
-                    await asyncio.sleep(2)
-                    continue
+                    await asyncio.sleep(1)
+                    try:
+                        table = await ss.get_worksheet_by_id(value)
+                        table_data = await table.get_all_values()
+                        table_data_copy = [row[:len(config.SHEETS_COLUMNS[key])] for row in table_data]
+                    except Exception as e:
+                        print(f"Ошибка при обновлении: {e}")
+                        await asyncio.sleep(2)
+                        continue
 
-                # Проверяем есть ли ячейка в переменной
-                for idx, row in enumerate(table_data_copy[1:], start=1):
-                    if idx % 25 == 0:
-                        await asyncio.sleep(0)
-                    row_dict = {}
+                    # Проверяем есть ли ячейка в переменной
+                    for idx, row in enumerate(table_data_copy[1:], start=1):
+                        if idx % 25 == 0:
+                            await asyncio.sleep(0)
+                        row_dict = {}
 
-                    n = 0
-                    for cell in row:
-                        #print(f'cell: {cell} key: {config.SHEETS_COLUMNS[key][n]}')
-                        row_dict[config.SHEETS_COLUMNS[key][n]] = cell
-                        n += 1
+                        n = 0
+                        for cell in row:
+                            #print(f'cell: {cell} key: {config.SHEETS_COLUMNS[key][n]}')
+                            row_dict[config.SHEETS_COLUMNS[key][n]] = cell
+                            n += 1
 
-                    if row_dict not in config.SHEETS_DATA[key]:
-                        config.SHEETS_DATA[key].append(row_dict)
-                        print(f'Добавлено: {row_dict}')
+                        if row_dict not in config.SHEETS_DATA[key]:
+                            config.SHEETS_DATA[key].append(row_dict)
+                            print(f'Добавлено: {row_dict}')
 
-                rows_to_delete = []
+                    rows_to_delete = []
 
-                # Проверяем есть ли ячейка в гугл-таблице
-                for idx, row in enumerate(config.SHEETS_DATA[key], start=1):
-                    if idx % 25 == 0:
-                        await asyncio.sleep(0)
-                    if list(row.values()) not in table_data_copy[1:]:
-                        rows_to_delete.append(row)
-                        print(f'Удалено: {list(row.values())}//{table_data_copy[1:]}')
-                
-                for row in rows_to_delete:
-                    config.SHEETS_DATA[key].remove(row)
-                    print(f'Удалено: {row}')
+                    # Проверяем есть ли ячейка в гугл-таблице
+                    for idx, row in enumerate(config.SHEETS_DATA[key], start=1):
+                        if idx % 25 == 0:
+                            await asyncio.sleep(0)
+                        if list(row.values()) not in table_data_copy[1:]:
+                            rows_to_delete.append(row)
+                            print(f'Удалено: {list(row.values())}//{table_data_copy[1:]}')
+                    
+                    for row in rows_to_delete:
+                        config.SHEETS_DATA[key].remove(row)
+                        print(f'Удалено: {row}')
 
             await asyncio.sleep(2)
 
