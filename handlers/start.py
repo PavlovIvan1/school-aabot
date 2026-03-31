@@ -17,7 +17,7 @@ import re
 import datetime
 import asyncio
 import traceback
-from typing import Dict, Any, Callable, Awaitable
+from typing import Dict, Any, Callable, Awaitable, Optional
 import time
 import math
 
@@ -28,6 +28,37 @@ import database
 import config
 
 db = database.MySQL()
+CHAT_OWNER_CACHE: Dict[int, Dict[str, Any]] = {}
+
+
+async def resolve_chat_owner(bot, chat_id: int) -> Optional[int]:
+    now_ts = time.time()
+    cached = CHAT_OWNER_CACHE.get(chat_id)
+
+    if cached is not None and cached.get("expires_at", 0) > now_ts:
+        return cached.get("owner_id")
+
+    try:
+        chat_admins = await bot.get_chat_administrators(chat_id)
+        chat_name = (await bot.get_chat(chat_id)).full_name or ""
+    except (TelegramBadRequest, TelegramRetryAfter):
+        # Если Telegram дал flood-control или чат не подходит для запроса,
+        # просто пропускаем этот апдейт без исключения.
+        return None
+
+    owner_id = None
+    for admin in chat_admins:
+        mentor_data = db.get_mentor_by_id(admin.user.id)
+        if mentor_data is not None and chat_name.__contains__(mentor_data["mentor_name"]):
+            owner_id = admin.user.id
+            break
+
+    CHAT_OWNER_CACHE[chat_id] = {
+        "owner_id": owner_id,
+        "expires_at": now_ts + 600,  # 10 минут
+    }
+
+    return owner_id
 
 
 async def add_user_to_spreadsheet(user_id: int, email: str, flow: str, bot):
@@ -1458,16 +1489,7 @@ async def message_reaction_handler(message_reaction: types.MessageReactionUpdate
     if message_data is None:
         return
 
-    chat_admins = await message_reaction.bot.get_chat_administrators(message_reaction.chat.id)
-    chat_name = (await message_reaction.bot.get_chat(message_reaction.chat.id)).full_name
-    owner_id = None
-
-    for admin in chat_admins:
-        mentor_data = db.get_mentor_by_id(admin.user.id)
-
-        if mentor_data is not None and chat_name.__contains__(mentor_data["mentor_name"]):
-            owner_id = admin.user.id
-            break
+    owner_id = await resolve_chat_owner(message_reaction.bot, message_reaction.chat.id)
 
     if owner_id is None:
         return
@@ -1483,25 +1505,11 @@ async def command_start_handler(message: Message) -> None:
     trackers_chats = db.get_trackers_chats()
 
     # Обработка системы метрик
-    if message.chat.id not in support_chat_ids and message.chat.id != config.PSYHOLOGIST_CHAT_ID and message.chat.id not in chat_ids_list and str(message.chat.id) not in trackers_chats:
-        try:
-            chat_admins = await message.bot.get_chat_administrators(message.chat.id)
-            chat_name = (await message.bot.get_chat(message.chat.id)).full_name
-        except TelegramBadRequest:
-            # Not a group/supergroup chat or no admins
-            chat_admins = []
-            chat_name = None
-        
+    if message.chat.type in ('group', 'supergroup') and message.chat.id not in support_chat_ids and message.chat.id != config.PSYHOLOGIST_CHAT_ID and message.chat.id not in chat_ids_list and str(message.chat.id) not in trackers_chats:
         chat_type = None
-        owner_id = None
-
-        for admin in chat_admins:
-            mentor_data = db.get_mentor_by_id(admin.user.id)
-
-            if mentor_data is not None and chat_name is not None and chat_name.__contains__(mentor_data["mentor_name"]):
-                owner_id = admin.user.id
-                chat_type = 'mentor'
-                break
+        owner_id = await resolve_chat_owner(message.bot, message.chat.id)
+        if owner_id is not None:
+            chat_type = 'mentor'
         
         if owner_id is not None:
             is_question = False if message.text is None or message.text == "" else quesion_checker.is_question(message.text)
