@@ -725,10 +725,11 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
 @start_router.callback_query(F.data == 'get_onboarding')
 async def command_start_handler(call: CallbackQuery) -> None:
     user_data = db.get_user(call.from_user.id)
+    email_key = user_data[0]["email"].lower().strip()
 
-    if user_data[0]["email"] not in config.USERS_ADDITIONAL_INFO or config.USERS_ADDITIONAL_INFO[user_data[0]["email"]]["tariff"] is None or len(config.USERS_ADDITIONAL_INFO[user_data[0]["email"]]["tariff"]) == 0:
+    if email_key not in config.USERS_ADDITIONAL_INFO or config.USERS_ADDITIONAL_INFO[email_key]["tariff"] is None or len(config.USERS_ADDITIONAL_INFO[email_key]["tariff"]) == 0:
         await call.answer("У вас не указан тариф, обратитесь в поддержку", show_alert=True)
-    elif config.USERS_ADDITIONAL_INFO[user_data[0]["email"]]["tariff"] == "Про повышение до VIP": # TODO указать номер потока
+    elif config.USERS_ADDITIONAL_INFO[email_key]["tariff"] == "Про повышение до VIP": # TODO указать номер потока
         await edit_message(call.message, """Привет-привет! 🙌
 Я Иляна из команды заботы Арины Алекс 💛
 Поздравляю с покупкой менторства “Заработок на Reels”, тариф ВИП, поток 15.7 - впереди вас ждет незабываемое приключение! 🎬
@@ -751,7 +752,7 @@ async def command_start_handler(call: CallbackQuery) -> None:
 https://t.me/addlist/kWP0mHTSa3IyMWJi
 
 Рада, что вы с нами! Всё получится - предобучение стартует 16 февраля, основная программа - 23 февраля 🚀""", reply_markup=keyboard.back_to_main_keyboard(), parse_mode="HTML")
-    elif config.USERS_ADDITIONAL_INFO[user_data[0]["email"]]["tariff"] == "База повышение до Про": # TODO указать номер потока
+    elif config.USERS_ADDITIONAL_INFO[email_key]["tariff"] == "База повышение до Про": # TODO указать номер потока
         await edit_message(call.message, """Привет-привет! 🙌
 Я Иляна из команды заботы Арины Алекс 💛
 Поздравляю с покупкой менторства “Заработок на Reels”, тариф ПРО, поток 15.7 - впереди вас ждет незабываемое приключение! 🎬

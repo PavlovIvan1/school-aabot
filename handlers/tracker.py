@@ -150,11 +150,12 @@ async def send_media_group(chat_id: int, bot):
 async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
     user_data = db.get_user(call.from_user.id)
     users_flow = db.get_flow_by_email(user_data[0]['email'])
+    email_key = user_data[0]["email"].lower().strip()
 
     # Добавляем пользователя в Google Таблицу если его там нет
     await add_user_to_spreadsheet(call.from_user.id, user_data[0]['email'], users_flow, call.bot)
 
-    if user_data[0]["email"].lower() not in config.USERS_ADDITIONAL_INFO or len(config.USERS_ADDITIONAL_INFO[user_data[0]["email"].lower()]["tracker_chat_id"]) == 0:
+    if email_key not in config.USERS_ADDITIONAL_INFO or len(config.USERS_ADDITIONAL_INFO[email_key]["tracker_chat_id"]) == 0:
         await call.answer("Вам не назначен личный трекер, обратитесь в поддержку", show_alert=True)
         return
 
@@ -224,8 +225,9 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
     msg_1 = None
 
     try:
-        msg_1 = await message.bot.send_message(config.USERS_ADDITIONAL_INFO[user_data[0]["email"].lower()]["tracker_chat_id"], f'⬇️ {message.from_user.full_name} @{message.from_user.username} ({user_data[0]["email"].lower()} Поток: {users_flow}) отправил сообщение (Техническая информация: {message.from_user.id}) ⬇️', reply_markup=keyboard.web_app_tracker_chat_keyboard(message.from_user.id))
-        await message.bot.forward_message(config.USERS_ADDITIONAL_INFO[user_data[0]["email"].lower()]["tracker_chat_id"], message.chat.id, message.message_id)
+        email_key = user_data[0]["email"].lower().strip()
+        msg_1 = await message.bot.send_message(config.USERS_ADDITIONAL_INFO[email_key]["tracker_chat_id"], f'⬇️ {message.from_user.full_name} @{message.from_user.username} ({email_key} Поток: {users_flow}) отправил сообщение (Техническая информация: {message.from_user.id}) ⬇️', reply_markup=keyboard.web_app_tracker_chat_keyboard(message.from_user.id))
+        await message.bot.forward_message(config.USERS_ADDITIONAL_INFO[email_key]["tracker_chat_id"], message.chat.id, message.message_id)
     except Exception:
         error_message = f"⚠️ Ошибка при отправке сообщения трекеру\n\nПользователь: {message.from_user.full_name} (@{message.from_user.username}, ID: {message.from_user.id})\nEmail: {user_data[0]['email'].lower()}\nПоток: {users_flow}\n\nТекст сообщения: {message.html_text or '(пусто)'}\n\nОшибка:\n{traceback.format_exc()}"
         try:
