@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Дашборд ДЗ трекеров</title>
   <style>
-    :root{--bg:#1a1a1a;--bg2:#222;--card:#262626;--line:#343434;--text:#e8e8e8;--muted:#a6a6a6}
+    :root{--bg:#1a1a1a;--bg2:#222;--card:#262626;--line:#343434;--text:#e8e8e8;--muted:#a6a6a6;--g:#58c37f;--y:#d7b15a;--r:#d86e6e}
     *{box-sizing:border-box;font-family:Arial,sans-serif}
     body{margin:0;background:var(--bg);color:var(--text)}
     .wrap{max-width:1400px;margin:0 auto;padding:14px}
-    .panel{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px}
+    .panel{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
     h1{margin:0;font-size:18px}.sub{margin-top:6px;color:var(--muted);font-size:12px}
     .filters{display:grid;grid-template-columns:repeat(7,minmax(120px,1fr));gap:8px;margin-top:10px}
     select,input,button{height:34px;background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:0 10px}
@@ -19,6 +19,7 @@
     th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left}
     th{font-size:12px;color:var(--muted)}
     .muted{color:var(--muted);font-size:12px}
+    .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}.g{background:var(--g)}.y{background:var(--y)}.r{background:var(--r)}
     .cards{display:none}
     .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px}
     .row{display:flex;justify-content:space-between;gap:10px;margin-top:6px;font-size:13px;align-items:center}
@@ -89,6 +90,8 @@
   <script>
     const rows = {TRACKER_HOMEWORK_DATA_JSON};
     const $ = i => document.getElementById(i);
+    const statusAccept=v=>v>=75?'g':(v>=55?'y':'r');
+    const statusPending=v=>v<=3?'g':(v<=8?'y':'r');
 
     function fillFilters(){
       const flows = ['Все', ...new Set(rows.map(r => r.flow || '—'))];
@@ -167,8 +170,8 @@
           <td>${r.total}</td>
           <td>${r.accepted}</td>
           <td>${r.rework}</td>
-          <td>${r.pending_review}</td>
-          <td>${r.accept_rate}%</td>
+          <td><span class="dot ${statusPending(r.pending_review || 0)}"></span>${r.pending_review}</td>
+          <td><span class="dot ${statusAccept(r.accept_rate || 0)}"></span>${r.accept_rate}%</td>
           <td>${r.last_activity_date || '—'}</td>
         </tr>
       `).join('');
@@ -180,8 +183,8 @@
           <div class="row"><span>Всего ДЗ</span><b>${r.total}</b></div>
           <div class="row"><span>Принято</span><b>${r.accepted}</b></div>
           <div class="row"><span>На доработку</span><b>${r.rework}</b></div>
-          <div class="row"><span>Ожидают проверки</span><b>${r.pending_review}</b></div>
-          <div class="row"><span>% принятия</span><b>${r.accept_rate}%</b></div>
+          <div class="row"><span>Ожидают проверки</span><b><span class="dot ${statusPending(r.pending_review || 0)}"></span>${r.pending_review}</b></div>
+          <div class="row"><span>% принятия</span><b><span class="dot ${statusAccept(r.accept_rate || 0)}"></span>${r.accept_rate}%</b></div>
           <div class="row"><span>Последняя активность</span><b>${r.last_activity_date || '—'}</b></div>
         </div>
       `).join('');

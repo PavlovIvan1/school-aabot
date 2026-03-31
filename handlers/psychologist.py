@@ -108,10 +108,7 @@ class SecondSubMiddleware(BaseMiddleware):
             
             await asyncio.sleep(5)
 
-        try:
-            return await event.answer("Бот ещё не готов к работе, попробуйте позже", show_alert=True)
-        except TelegramBadRequest:
-            pass
+        return
 
 
 psychologist_router = Router()

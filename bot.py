@@ -996,6 +996,43 @@ async def tracker_personal_dashboard_page():
                 "init": float(row.get("initiative_percent") or 0),
                 "link": f"https://rb.infinitydev.tw1.su/get_tracker_chat?user_id={int(student_tg_id)}" if student_tg_id and str(student_tg_id).isdigit() and int(student_tg_id) > 0 else "#",
             })
+
+        # Fallback: если агрегированные дневные метрики пока пустые,
+        # собираем данные напрямую из рабочих таблиц сообщений.
+        if len(dashboard_data) == 0:
+            engagement_data = db.get_tracker_engagement()
+            for data in engagement_data[:3000]:
+                tracker_data = db.get_tracker_by_id(data["owner_id"])
+                tracker_avg = db.get_tracker_avg_response_time(data["chat_id"], data["owner_id"])
+
+                if tracker_data is None or tracker_avg is None:
+                    continue
+
+                student_tg_id = int(data["chat_id"]) if str(data.get("chat_id")).lstrip('-').isdigit() else 0
+                student_name = f"ID {student_tg_id}" if student_tg_id else f"Чат {data['chat_id']}"
+                tariff = "—"
+
+                if student_tg_id > 0:
+                    student_user = db.get_user(student_tg_id)
+                    if len(student_user) != 0:
+                        student_name = student_user[0].get("username") or student_name
+                        student_email = (student_user[0].get("email") or "").lower().strip()
+                        if student_email in config.USERS_ADDITIONAL_INFO:
+                            tariff = config.USERS_ADDITIONAL_INFO[student_email].get("tariff") or "—"
+
+                dashboard_data.append({
+                    "tracker": tracker_data.get("tracker_name") or f"ID {data.get('owner_id', '')}",
+                    "tracker_id": data.get("owner_id"),
+                    "student": student_name,
+                    "stream": str(data.get("most_common_flow_in_chat") or "—"),
+                    "tariff": tariff,
+                    "week": 1,
+                    "date": str(datetime.date.today()),
+                    "avg": float(tracker_avg.get("avg_response_hours") or 0),
+                    "pause": 0,
+                    "init": float(data.get("engagement_percent_in_chat") or 0),
+                    "link": f"https://rb.infinitydev.tw1.su/get_tracker_chat?user_id={student_tg_id}" if student_tg_id > 0 else "#",
+                })
     except Exception:
         logging.exception("tracker_personal_dashboard_page failed")
 

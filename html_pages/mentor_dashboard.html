@@ -5,24 +5,33 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Дашборд менторов</title>
   <style>
-    :root{--bg:#1a1a1a;--bg2:#222;--card:#262626;--line:#343434;--text:#e8e8e8;--muted:#a6a6a6}
+    :root{--bg:#1a1a1a;--bg2:#222;--card:#262626;--line:#343434;--text:#e8e8e8;--muted:#a6a6a6;--g:#58c37f;--y:#d7b15a;--r:#d86e6e}
     *{box-sizing:border-box;font-family:Arial,sans-serif}
     body{margin:0;background:var(--bg);color:var(--text)}
     .wrap{max-width:1400px;margin:0 auto;padding:14px}
-    .panel{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px}
+    .panel{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
     h1{margin:0;font-size:18px}.sub{margin-top:6px;color:var(--muted);font-size:12px}
     .filters{display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:8px;margin-top:10px}
     select,button{height:34px;background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:0 10px}
     button{cursor:pointer}
-    .kpis{display:grid;grid-template-columns:repeat(4,minmax(170px,1fr));gap:10px}
+    .kpis{display:grid;grid-template-columns:repeat(5,minmax(170px,1fr));gap:12px;margin-bottom:12px}
     .kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px}
     .kpi .t{font-size:12px;color:var(--muted)} .kpi .v{font-size:20px;margin-top:8px}
+    .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}.g{background:var(--g)}.y{background:var(--y)}.r{background:var(--r)}
+    .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
     table{width:100%;border-collapse:collapse;font-size:13px}
     th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left}
     th{font-size:12px;color:var(--muted)}
+    .cards{display:none}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px}
+    .row{display:flex;justify-content:space-between;gap:10px;margin-top:6px;font-size:13px;align-items:center}
     .empty{color:var(--muted);font-size:13px;padding:12px 4px}
     @media(max-width:900px){.filters{grid-template-columns:1fr 1fr}.kpis{grid-template-columns:1fr 1fr}}
-    @media(max-width:768px){.wrap{padding:10px}.filters,.kpis{grid-template-columns:1fr}}
+    @media(max-width:768px){
+      .wrap{padding:10px}.filters,.kpis{grid-template-columns:1fr}
+      .table-wrap{display:none}
+      .cards{display:block}
+    }
   </style>
 </head>
 <body>
@@ -47,22 +56,25 @@
     <div class="kpis" id="kpis"></div>
 
     <div class="panel">
-      <table>
-        <thead>
-          <tr>
-            <th>Чат</th>
-            <th>Ментор</th>
-            <th>Поток</th>
-            <th>Неделя</th>
-            <th>Ср. ответ (ч)</th>
-            <th>Макс. пауза (мин)</th>
-            <th>Инициативность (%)</th>
-            <th>Активность</th>
-            <th>Ссылка</th>
-          </tr>
-        </thead>
-        <tbody id="rows"></tbody>
-      </table>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Чат</th>
+              <th>Ментор</th>
+              <th>Поток</th>
+              <th>Неделя</th>
+              <th>Ср. ответ (ч)</th>
+              <th>Макс. пауза (мин)</th>
+              <th>Инициативность (%)</th>
+              <th>Активность</th>
+              <th>Ссылка</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <div id="cards" class="cards"></div>
     </div>
   </div>
 
@@ -82,6 +94,10 @@
     }));
 
     const $ = id => document.getElementById(id);
+    const statusAvg=v=>v<3?'g':(v<=5?'y':'r');
+    const statusPause=v=>v<360?'g':(v<=540?'y':'r');
+    const statusInit=v=>v>30?'g':(v>=20?'y':'r');
+    const statusActivity=v=>v>6?'g':(v>=3?'y':'r');
 
     function fillFilters(){
       const streams = ['Все', ...new Set(rows.map(r => r.stream || '—'))];
@@ -119,18 +135,24 @@
     function mean(data, key){ return data.length ? data.reduce((s,x)=>s + (Number(x[key]) || 0), 0) / data.length : 0; }
 
     function renderKpis(data){
+      const avg = mean(data,'avg');
+      const pause = mean(data,'pause');
+      const init = mean(data,'init');
+      const activity = mean(data,'student');
       const cards = [
-        ['Чатов', `${data.length}`],
-        ['Ср. время ответа', `${mean(data,'avg').toFixed(1)} ч`],
-        ['Ср. макс. пауза', `${Math.round(mean(data,'pause'))} мин`],
-        ['Ср. инициативность', `${Math.round(mean(data,'init'))}%`],
+        ['Чатов', `${data.length}`, data.length > 10 ? 'g' : (data.length > 3 ? 'y' : 'r')],
+        ['Ср. время ответа', `${avg.toFixed(1)} ч`, statusAvg(avg)],
+        ['Ср. макс. пауза', `${Math.round(pause)} мин`, statusPause(pause)],
+        ['Ср. инициативность', `${Math.round(init)}%`, statusInit(init)],
+        ['Активность чата', `${activity.toFixed(1)}`, statusActivity(activity)],
       ];
-      $('kpis').innerHTML = cards.map(c => `<div class="kpi"><div class="t">${c[0]}</div><div class="v">${c[1]}</div></div>`).join('');
+      $('kpis').innerHTML = cards.map(c => `<div class="kpi"><div class="t">${c[0]}</div><div class="v"><span class="dot ${c[2]}"></span>${c[1]}</div></div>`).join('');
     }
 
     function renderTable(data){
       if(!data.length){
         $('rows').innerHTML = '<tr><td colspan="9" class="empty">Нет данных за выбранный период</td></tr>';
+        $('cards').innerHTML = '<div class="empty">Нет данных за выбранный период</div>';
         return;
       }
       $('rows').innerHTML = data.map(r => `
@@ -139,12 +161,25 @@
           <td>${r.mentor}</td>
           <td>${r.stream}</td>
           <td>${r.week}</td>
-          <td>${r.avg.toFixed(1)}</td>
-          <td>${Math.round(r.pause)}</td>
-          <td>${Math.round(r.init)}</td>
-          <td>${r.student.toFixed(1)}</td>
+          <td><span class="dot ${statusAvg(r.avg)}"></span>${r.avg.toFixed(1)}</td>
+          <td><span class="dot ${statusPause(r.pause)}"></span>${Math.round(r.pause)}</td>
+          <td><span class="dot ${statusInit(r.init)}"></span>${Math.round(r.init)}</td>
+          <td><span class="dot ${statusActivity(r.student)}"></span>${r.student.toFixed(1)}</td>
           <td><a href="${r.link}" target="_blank" rel="noopener">Открыть</a></td>
         </tr>
+      `).join('');
+
+      $('cards').innerHTML = data.map(r => `
+        <div class="card">
+          <div><b>${r.chat}</b></div>
+          <div class="row"><span>Ментор</span><b>${r.mentor}</b></div>
+          <div class="row"><span>Поток / Неделя</span><b>${r.stream} / ${r.week}</b></div>
+          <div class="row"><span>Ср. ответ</span><b><span class="dot ${statusAvg(r.avg)}"></span>${r.avg.toFixed(1)} ч</b></div>
+          <div class="row"><span>Макс. пауза</span><b><span class="dot ${statusPause(r.pause)}"></span>${Math.round(r.pause)} мин</b></div>
+          <div class="row"><span>Инициативность</span><b><span class="dot ${statusInit(r.init)}"></span>${Math.round(r.init)}%</b></div>
+          <div class="row"><span>Активность</span><b><span class="dot ${statusActivity(r.student)}"></span>${r.student.toFixed(1)}</b></div>
+          <div class="row"><a href="${r.link}" target="_blank" rel="noopener">Открыть</a></div>
+        </div>
       `).join('');
     }
 

@@ -9,19 +9,19 @@
     *{box-sizing:border-box;font-family:Arial,sans-serif}
     body{margin:0;background:var(--bg);color:var(--text);overflow-x:hidden}
     .wrap{max-width:1400px;margin:0 auto;padding:14px}
-    .panel{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px}
+    .panel{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
     h1{margin:0;font-size:18px}.sub{margin-top:6px;color:var(--muted);font-size:12px}
     .filters{display:grid;grid-template-columns:repeat(5,minmax(140px,1fr));gap:8px;margin-top:10px}
     select,button{height:34px;background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:0 10px}
     button{cursor:pointer} button:hover{background:#2d2d2d}
-    .kpis{display:grid;grid-template-columns:repeat(4,minmax(180px,1fr));gap:10px}
+    .kpis{display:grid;grid-template-columns:repeat(4,minmax(180px,1fr));gap:12px;margin-bottom:12px}
     .kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px}
     .kpi .t{font-size:12px;color:var(--muted)} .kpi .v{font-size:20px;margin-top:8px}
     .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}.g{background:var(--g)}.y{background:var(--y)}.r{background:var(--r)}
     table{width:100%;border-collapse:collapse;font-size:13px} th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left} th{font-size:12px;color:var(--muted)}
     td{overflow-wrap:anywhere;word-break:break-word}
     tr.row:hover{background:#2d2d2d;cursor:pointer}
-    .grid{display:grid;grid-template-columns:2fr 1fr;gap:10px}
+    .grid{display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-bottom:12px}
     .chip{background:#2b2b2b;border:1px solid var(--line);border-radius:8px;padding:7px 8px;margin-bottom:6px;font-size:12px;overflow-wrap:anywhere;word-break:break-word}
     .action{color:#d5d5d5;text-decoration:none;border:1px solid var(--line);border-radius:6px;padding:2px 6px}.action:hover{background:#313131}
     @media(max-width:1100px){.filters{grid-template-columns:repeat(2,minmax(120px,1fr))}.kpis{grid-template-columns:repeat(2,minmax(160px,1fr))}.grid{grid-template-columns:1fr}}
