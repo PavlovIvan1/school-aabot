@@ -2041,6 +2041,7 @@ def start_sync_process_managed():
 
     env = os.environ.copy()
     env["CHECK_INFO_WORKER"] = "1"
+    env["ENABLE_METRICS_SYNC"] = "1"
     sync_process = subprocess.Popen(["python3", "bot.py"], env=env)
     atexit.register(_stop_sync_process)
 
@@ -2420,8 +2421,8 @@ async def check_info():
                     await asyncio.sleep(2)
                     continue
             
-            # Обновление метрик
-            if time.time() > metrics_time:
+            # Обновление метрик (вынесено в отдельный worker-процесс по умолчанию).
+            if os.getenv("ENABLE_METRICS_SYNC", "0") == "1" and time.time() > metrics_time:
                 metrics_time = time.time() + 600
                 try:
                     print("Обновляю метрики")
@@ -2625,12 +2626,14 @@ async def main() -> None:
     if os.getenv("EMBED_WEB_SERVER", "0") == "1":
         start_web_process_managed()
 
-    # Запускаем sync-воркер отдельным процессом, если не отключено явно.
-    if os.getenv("DISABLE_BACKGROUND_SYNC", "0") != "1":
+    # По умолчанию worker НЕ поднимаем автоматически.
+    # Разделение процессов делается вручную (tmux/systemd).
+    # Для автозапуска оставлена опция AUTOSTART_SYNC_WORKER=1.
+    if os.getenv("AUTOSTART_SYNC_WORKER", "0") == "1":
         start_sync_process_managed()
-        print("[BOOT] background sync worker started")
+        print("[BOOT] background sync worker autostarted")
     else:
-        print("[BOOT] background sync disabled by DISABLE_BACKGROUND_SYNC=1")
+        print("[BOOT] background sync worker is manual by default")
 
     await on_startup()
 
