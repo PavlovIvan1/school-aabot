@@ -30,6 +30,8 @@ import config
 
 db = database.MySQL()
 CHAT_OWNER_CACHE: Dict[int, Dict[str, Any]] = {}
+UNREAD_TRACKER_CACHE: Dict[int, Dict[str, Any]] = {}
+UNREAD_TRACKER_TTL_SECONDS = 600
 
 
 def load_users_additional_info_from_file() -> None:
@@ -50,6 +52,25 @@ def load_sheets_data_from_file() -> None:
                 config.SHEETS_DATA = data
     except Exception:
         pass
+
+
+async def get_tracker_unread_cached(tg_id: int) -> bool:
+    now_ts = time.time()
+    cached = UNREAD_TRACKER_CACHE.get(tg_id)
+    if cached is not None and cached.get("expires_at", 0) > now_ts:
+        return bool(cached.get("has_unread", False))
+
+    has_unread = False
+    try:
+        has_unread = db.has_unread_tracker_messages(tg_id)
+    except Exception as e:
+        print(f"[UNREAD] failed to check unread for {tg_id}: {e}")
+
+    UNREAD_TRACKER_CACHE[tg_id] = {
+        "has_unread": bool(has_unread),
+        "expires_at": now_ts + UNREAD_TRACKER_TTL_SECONDS,
+    }
+    return bool(has_unread)
 
 
 async def resolve_chat_owner(bot, chat_id: int, chat_name: str = "") -> Optional[int]:
@@ -360,9 +381,7 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
             await message.bot.send_message(config.LOG_CHAT_ID, f'Не удалось найти информацию по быстрой ссылке: {message.from_user.full_name} @{message.from_user.username} (ID: {message.from_user.id})\nАргументы: {start_args}')
             return
         
-    # Временный safe-mode: отключаем проверку непрочитанных,
-    # чтобы /start отвечал мгновенно без риска подвисаний на БД.
-    has_tracker_unread = False
+    has_tracker_unread = await get_tracker_unread_cached(message.from_user.id)
 
     welcome_text = """Рады видеть тебя в обучении «Заработок на Reels»📱
 
@@ -416,9 +435,7 @@ async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
     except:
         pass
 
-    # Временный safe-mode: отключаем проверку непрочитанных,
-    # чтобы возврат в меню работал стабильно.
-    has_tracker_unread = False
+    has_tracker_unread = await get_tracker_unread_cached(call.from_user.id)
 
     try:
         await call.message.answer_photo(photo=FSInputFile("files/start.jpg"), caption="""Рады видеть тебя в обучении «Заработок на Reels»📱
