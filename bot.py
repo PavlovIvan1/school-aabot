@@ -61,6 +61,16 @@ def load_users_additional_info() -> None:
         pass
 
 
+def load_sheets_data_from_file() -> None:
+    try:
+        with open("config.json", "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, dict):
+                config.SHEETS_DATA = data
+    except Exception:
+        pass
+
+
 def get_creds():
     creds = Credentials.from_service_account_file("credentials.json")
     scoped = creds.with_scopes([
@@ -2622,6 +2632,7 @@ async def main() -> None:
 
     # Подтягиваем актуальный кэш назначений, который пишет sync_worker.
     load_users_additional_info()
+    load_sheets_data_from_file()
 
     # В обычном (polling) процессе не ждём check_info,
     # иначе при вынесенном sync-воркере middlewares могут вечно отвечать

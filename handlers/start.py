@@ -42,6 +42,16 @@ def load_users_additional_info_from_file() -> None:
         pass
 
 
+def load_sheets_data_from_file() -> None:
+    try:
+        with open("config.json", "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, dict):
+                config.SHEETS_DATA = data
+    except Exception:
+        pass
+
+
 async def resolve_chat_owner(bot, chat_id: int, chat_name: str = "") -> Optional[int]:
     now_ts = time.time()
     cached = CHAT_OWNER_CACHE.get(chat_id)
@@ -826,15 +836,19 @@ async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
 
     lessons_list = db.get_lessons(module_id, users_flow)
     module_data = db.get_module(module_id, users_flow)
-    
+
     if module_data is None:
-        error_message = f"⚠️ Ошибка при загрузке мини-аппа\n\nПользователь: {call.from_user.full_name} (@{call.from_user.username}, ID: {call.from_user.id})\nМодуль ID: {module_id}\nПоток: {users_flow}\n\nОшибка: module_data returned None\n\nTraceback:\n{traceback.format_exc()}"
-        try:
-            for admin_id in config.ADMINS_LIST:
-                await call.message.bot.send_message(admin_id, error_message)
-        except:
-            pass
-        await call.answer("Произошла ошибка при загрузке. Пожалуйста, сообщите об этом в поддержку.", show_alert=True)
+        # Пробуем обновить кэш модулей из файла, который пишет sync_worker.
+        load_sheets_data_from_file()
+        lessons_list = db.get_lessons(module_id, users_flow)
+        module_data = db.get_module(module_id, users_flow)
+
+    if module_data is None:
+        print(
+            f"[MINI_APP] module_data is None | user_id={call.from_user.id} "
+            f"module_id={module_id} flow={users_flow}"
+        )
+        # Пользователю не показываем техническую ошибку.
         return
     
     module_name = module_data['name']

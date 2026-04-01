@@ -36,8 +36,12 @@ tmux new -d -s "$SYNC_SESSION" "cd $PROJECT_DIR && python sync_worker.py"
 tmux set-option -t "$SYNC_SESSION" remain-on-exit on
 
 echo "[stack] start metrics session: $METRICS_SESSION"
-tmux new -d -s "$METRICS_SESSION" "cd $PROJECT_DIR && python metrics_worker.py"
-tmux set-option -t "$METRICS_SESSION" remain-on-exit on
+if [[ "${ENABLE_METRICS_WORKER:-0}" == "1" ]]; then
+  tmux new -d -s "$METRICS_SESSION" "cd $PROJECT_DIR && python metrics_worker.py"
+  tmux set-option -t "$METRICS_SESSION" remain-on-exit on
+else
+  echo "[stack] metrics worker disabled by default (set ENABLE_METRICS_WORKER=1 to enable)"
+fi
 
 echo "[stack] start web session: $WEB_SESSION"
 tmux new -d -s "$WEB_SESSION" "cd $PROJECT_DIR && python -m uvicorn bot:app --host $WEB_HOST --port $WEB_PORT --ssl-keyfile $SSL_KEYFILE --ssl-certfile $SSL_CERTFILE"
