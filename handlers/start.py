@@ -1588,7 +1588,7 @@ async def command_start_handler(message: Message) -> None:
     trackers_chats = db.get_trackers_chats()
 
     # Обработка системы метрик
-    if message.chat.type in ('group', 'supergroup') and message.chat.id not in support_chat_ids and message.chat.id != config.PSYHOLOGIST_CHAT_ID and message.chat.id not in chat_ids_list and str(message.chat.id) not in trackers_chats:
+    if message.chat.type in ('group', 'supergroup') and message.chat.id not in support_chat_ids and message.chat.id != config.PSYHOLOGIST_CHAT_ID and message.chat.id not in chat_ids_list and not db.is_tracker(message.chat.id):
         chat_type = None
         owner_id = await resolve_chat_owner(
             message.bot,
@@ -1618,12 +1618,12 @@ async def command_start_handler(message: Message) -> None:
         return
     
     # Обработка системы выгрузки у трекеров
-    if str(message.chat.id) in trackers_chats and message.text is not None and message.text == '/list':
+    if db.is_tracker(message.chat.id) and message.text is not None and message.text == '/list':
         await message.reply("Список учеников трекера:", reply_markup=keyboard.web_app_tracker_list_keyboard(message.chat.id))
         return
     
     # Обработка системы трекеров
-    if str(message.chat.id) in trackers_chats and message.reply_to_message is not None and message.reply_to_message.text is not None and message.reply_to_message.text.__contains__('(Техническая информация:'):
+    if db.is_tracker(message.chat.id) and message.reply_to_message is not None and message.reply_to_message.text is not None and message.reply_to_message.text.__contains__('(Техническая информация:'):
         user_id = int(message.reply_to_message.text.split("Техническая информация: ")[-1].split(")")[0])
         
         try:
