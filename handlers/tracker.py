@@ -159,6 +159,7 @@ async def send_media_group(chat_id: int, bot):
 
 @tracker_router.callback_query(F.data.startswith('write_tracker'))
 async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
+    load_users_additional_info_from_file()
     user_data = db.get_user(call.from_user.id)
     users_flow = db.get_flow_by_email(user_data[0]['email'])
     email_key = user_data[0]["email"].lower().strip()
@@ -204,6 +205,7 @@ async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
 async def command_start_handler(message: Message, state: FSMContext) -> None:
     state_data = await state.get_data()
     user_data = db.get_user(message.from_user.id)
+    load_users_additional_info_from_file()
     users_flow = db.get_flow_by_email(user_data[0]['email'])
 
     # Добавляем пользователя в Google Таблицу если его там нет

@@ -590,7 +590,8 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
         await websocket.close()
         return
 
-    user_email = (user_data[0].get("email") or "").lower()
+    load_users_additional_info()
+    user_email = (user_data[0].get("email") or "").lower().strip()
 
     try:
         users_flow = db.get_flow_by_email(user_email)
@@ -766,7 +767,8 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
         await websocket.close()
         return
     
-    user_email = user_data[0]["email"].lower()
+    load_users_additional_info()
+    user_email = (user_data[0]["email"] or "").lower().strip()
     
     # Проверяем, есть ли email в конфиге
     if user_email not in config.USERS_ADDITIONAL_INFO:
@@ -774,9 +776,13 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
     else:
         tracker_chat_id = config.USERS_ADDITIONAL_INFO[user_email].get("tracker_chat_id", "")
     
-    # Если tracker_chat_id пустой, используем значение по умолчанию
     if not tracker_chat_id:
-        tracker_chat_id = "-1002572458943"
+        await websocket.send_json({
+            "type": "error",
+            "message": "Не найден чат коммуникации трекера для пользователя. Проверьте tracker_chat_id в таблице users."
+        })
+        await websocket.close()
+        return
 
     try:
         while True:
