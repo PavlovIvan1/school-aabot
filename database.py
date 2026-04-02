@@ -138,6 +138,17 @@ class MySQL:
     def get_all_users_ids(self):
         self.cursor.execute("SELECT tg_id FROM users")
         return [i["tg_id"] for i in self.cursor.fetchall()]
+
+    def get_all_students_tg_ids(self):
+        self.cursor.execute(
+            """
+            SELECT DISTINCT u.tg_id
+            FROM users u
+            JOIN users_access ua ON ua.mail = u.email
+            WHERE u.tg_id IS NOT NULL AND u.tg_id != 0
+            """
+        )
+        return [i["tg_id"] for i in self.cursor.fetchall() if i.get("tg_id") is not None]
     
     def get_user_by_email(self, email):
         self.cursor.execute("SELECT * FROM users WHERE email = %s", (email,))

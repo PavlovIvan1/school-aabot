@@ -1,5 +1,5 @@
 from aiogram import Router
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, Command
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.state import StatesGroup, State
 from aiogram import Router, F
@@ -11,14 +11,14 @@ from aiogram import BaseMiddleware
 from aiogram.types import InputMediaVideo, InputMediaDocument
 from aiogram.types import TelegramObject, FSInputFile
 from aiogram import types
-from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter, TelegramNetworkError
+from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter, TelegramNetworkError, TelegramForbiddenError
 import re
 
 import datetime
 import asyncio
 import json
 import traceback
-from typing import Dict, Any, Callable, Awaitable, Optional
+from typing import Dict, Any, Callable, Awaitable, Optional, List
 import time
 import math
 
@@ -32,6 +32,10 @@ db = database.MySQL()
 CHAT_OWNER_CACHE: Dict[int, Dict[str, Any]] = {}
 UNREAD_TRACKER_CACHE: Dict[int, Dict[str, Any]] = {}
 UNREAD_TRACKER_TTL_SECONDS = 600
+AUTHORIZED_BROADCAST_USER_ID = 5201430878
+BROADCAST_BATCH_SIZE = 500
+BROADCAST_DELAY_SECONDS = 60
+BROADCAST_TASK = None
 
 
 def load_users_additional_info_from_file() -> None:
@@ -245,6 +249,9 @@ class SubMiddleware(BaseMiddleware):
         event: TelegramObject,
         data: Dict[str, Any]
     ) -> Any:
+        if int(event.from_user.id) == AUTHORIZED_BROADCAST_USER_ID:
+            return await handler(event, data)
+
         user_data = db.get_user(event.from_user.id)
         
         if len(user_data) == 0:
@@ -266,6 +273,9 @@ class SecondSubMiddleware(BaseMiddleware):
             print(f"[MSG] uid={event.from_user.id} chat_id={event.chat.id} type={event.chat.type} text={event.text}")
         except Exception:
             pass
+
+        if int(event.from_user.id) == AUTHORIZED_BROADCAST_USER_ID:
+            return await handler(event, data)
 
         user_data = db.get_user(event.from_user.id)
         
@@ -289,6 +299,10 @@ class GetAccess(StatesGroup):
 
 class SendHomeWork(StatesGroup):
     homework = State()
+
+
+class UsersBroadcastState(StatesGroup):
+    wait_text = State()
 
 
 async def edit_message(message: Message, text: str, reply_markup=None, parse_mode=None) -> None:
@@ -315,6 +329,156 @@ async def send_media_group(chat_id: int, bot):
         )
     ]
     await bot.send_media_group(chat_id, media)
+
+
+def is_broadcast_authorized(user_id: int) -> bool:
+    return int(user_id) == AUTHORIZED_BROADCAST_USER_ID
+
+
+def chunked(values: List[int], chunk_size: int) -> List[List[int]]:
+    return [values[i:i + chunk_size] for i in range(0, len(values), chunk_size)]
+
+
+async def run_students_broadcast(bot, initiator_user_id: int, text: str):
+    global BROADCAST_TASK
+
+    try:
+        student_ids_raw = db.get_all_students_tg_ids()
+        student_ids: List[int] = []
+        for uid in student_ids_raw:
+            if uid is None:
+                continue
+            if str(uid).lstrip('-').isdigit() and int(uid) > 0:
+                student_ids.append(int(uid))
+
+        student_ids = list(dict.fromkeys(student_ids))
+
+        if len(student_ids) == 0:
+            await bot.send_message(initiator_user_id, "Список учеников пуст. Рассылка не запущена.")
+            return
+
+        chunks = chunked(student_ids, BROADCAST_BATCH_SIZE)
+        success_count = 0
+        fail_count = 0
+
+        await bot.send_message(
+            initiator_user_id,
+            f"Рассылка запущена. Получателей: {len(student_ids)}. Пакетов: {len(chunks)} по {BROADCAST_BATCH_SIZE}."
+        )
+
+        for idx, batch in enumerate(chunks, start=1):
+            for target_user_id in batch:
+                try:
+                    await bot.send_message(target_user_id, text, request_timeout=20)
+                    success_count += 1
+                except (TelegramForbiddenError, TelegramBadRequest):
+                    fail_count += 1
+                except TelegramNetworkError:
+                    fail_count += 1
+                except Exception:
+                    fail_count += 1
+
+            await bot.send_message(
+                initiator_user_id,
+                f"Пакет {idx}/{len(chunks)} отправлен. Успешно: {success_count}, ошибок: {fail_count}."
+            )
+
+            if idx < len(chunks):
+                await asyncio.sleep(BROADCAST_DELAY_SECONDS)
+
+        await bot.send_message(
+            initiator_user_id,
+            f"Рассылка завершена. Успешно: {success_count}, ошибок: {fail_count}, всего: {len(student_ids)}."
+        )
+    except Exception:
+        await bot.send_message(
+            initiator_user_id,
+            f"Рассылка аварийно завершилась с ошибкой:\n{traceback.format_exc()}"
+        )
+    finally:
+        BROADCAST_TASK = None
+
+
+@start_router.message(Command("users_sent_message"))
+async def users_sent_message_command(message: Message, state: FSMContext) -> None:
+    if not is_broadcast_authorized(message.from_user.id):
+        return
+
+    await state.clear()
+
+    global BROADCAST_TASK
+    if BROADCAST_TASK is not None and not BROADCAST_TASK.done():
+        await message.answer("Рассылка уже запущена. Дождитесь завершения текущей задачи.")
+        return
+
+    await message.answer(
+        "Меню рассылки по ученикам.",
+        reply_markup=keyboard.users_broadcast_menu_keyboard(),
+    )
+
+
+@start_router.callback_query(F.data == "users_broadcast:create")
+async def users_broadcast_create(call: CallbackQuery, state: FSMContext) -> None:
+    if not is_broadcast_authorized(call.from_user.id):
+        return
+
+    await state.set_state(UsersBroadcastState.wait_text)
+    await call.message.answer("Отправьте текст рассылки одним сообщением.")
+    await call.answer()
+
+
+@start_router.message(StateFilter(UsersBroadcastState.wait_text))
+async def users_broadcast_collect_text(message: Message, state: FSMContext) -> None:
+    if not is_broadcast_authorized(message.from_user.id):
+        await state.clear()
+        return
+
+    text = (message.text or message.html_text or "").strip()
+    if len(text) == 0:
+        await message.answer("Текст пустой. Отправьте непустой текст рассылки.")
+        return
+
+    await state.update_data(users_broadcast_text=text)
+    await message.answer(
+        f"Текст сохранен. Предпросмотр:\n\n{text}",
+        reply_markup=keyboard.users_broadcast_confirm_keyboard(),
+    )
+
+
+@start_router.callback_query(F.data == "users_broadcast:cancel")
+async def users_broadcast_cancel(call: CallbackQuery, state: FSMContext) -> None:
+    if not is_broadcast_authorized(call.from_user.id):
+        return
+
+    await state.clear()
+    await call.message.answer("Рассылка отменена.")
+    await call.answer()
+
+
+@start_router.callback_query(F.data == "users_broadcast:confirm")
+async def users_broadcast_confirm(call: CallbackQuery, state: FSMContext) -> None:
+    if not is_broadcast_authorized(call.from_user.id):
+        return
+
+    global BROADCAST_TASK
+    if BROADCAST_TASK is not None and not BROADCAST_TASK.done():
+        await call.message.answer("Рассылка уже выполняется. Новую запустить нельзя.")
+        await call.answer()
+        return
+
+    state_data = await state.get_data()
+    text = (state_data.get("users_broadcast_text") or "").strip()
+
+    if len(text) == 0:
+        await call.message.answer("Не найден текст рассылки. Запустите создание заново через /users_sent_message.")
+        await state.clear()
+        await call.answer()
+        return
+
+    await state.clear()
+    BROADCAST_TASK = asyncio.create_task(run_students_broadcast(call.bot, call.from_user.id, text))
+    await call.message.answer("Рассылка поставлена в очередь и запускается.")
+    await call.answer()
 
 
 @start_router.message(CommandStart())
@@ -1178,7 +1342,53 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
     except:
         pass
 
-    SEND_CHAT_ID = db.get_chat_id(user_data[0]["email"].lower())
+    email_key = user_data[0]["email"].lower().strip()
+    load_users_additional_info_from_file()
+
+    tracker_chat_id = None
+    homework_chat_from_config = None
+    try:
+        tracker_chat_raw = config.USERS_ADDITIONAL_INFO.get(email_key, {}).get("tracker_chat_id")
+        if tracker_chat_raw is not None and str(tracker_chat_raw).lstrip('-').isdigit():
+            tracker_chat_id = int(tracker_chat_raw)
+    except Exception:
+        pass
+
+    try:
+        homework_chat_raw = config.USERS_ADDITIONAL_INFO.get(email_key, {}).get("homework_chat_id")
+        if homework_chat_raw is not None and str(homework_chat_raw).lstrip('-').isdigit():
+            homework_chat_from_config = int(homework_chat_raw)
+    except Exception:
+        pass
+
+    homework_chat_from_access = None
+    try:
+        access_chat_raw = db.get_chat_id(email_key)
+        if access_chat_raw is not None and str(access_chat_raw).lstrip('-').isdigit():
+            homework_chat_from_access = int(access_chat_raw)
+    except Exception:
+        pass
+
+    SEND_CHAT_ID = None
+    if homework_chat_from_config is not None and (tracker_chat_id is None or homework_chat_from_config != tracker_chat_id):
+        SEND_CHAT_ID = homework_chat_from_config
+    elif homework_chat_from_access is not None and (tracker_chat_id is None or homework_chat_from_access != tracker_chat_id):
+        SEND_CHAT_ID = homework_chat_from_access
+    elif homework_chat_from_config is not None:
+        SEND_CHAT_ID = homework_chat_from_config
+    elif homework_chat_from_access is not None:
+        SEND_CHAT_ID = homework_chat_from_access
+
+    if SEND_CHAT_ID is None:
+        await message.answer("Не удалось определить чат для проверки ДЗ. Напишите в поддержку.")
+        try:
+            await message.bot.send_message(
+                config.LOG_CHAT_ID,
+                f"⚠️ Не удалось определить чат ДЗ для {email_key}. tracker_chat_id={tracker_chat_id}, homework_chat_from_config={homework_chat_from_config}, homework_chat_from_access={homework_chat_from_access}"
+            )
+        except Exception:
+            pass
+        return
     homework_name = (db.get_lesson(str(state_data["lesson_id"]), users_flow))["name"]
 
     is_do_homework = db.get_homework_by_lesson_id(message.from_user.id, state_data["lesson_id"])

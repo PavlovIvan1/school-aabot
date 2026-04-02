@@ -382,3 +382,16 @@ def staff_dashboard_keyboard() -> InlineKeyboardMarkup:
     builder.row(InlineKeyboardButton(text="🧩 ДЗ трекеров", url="https://rb.infinitydev.tw1.su/tracker_homework_dashboard"))
 
     return builder.as_markup()
+
+
+def users_broadcast_menu_keyboard() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="✉️ Создать рассылку", callback_data="users_broadcast:create"))
+    return builder.as_markup()
+
+
+def users_broadcast_confirm_keyboard() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="✅ Запустить", callback_data="users_broadcast:confirm"))
+    builder.row(InlineKeyboardButton(text="❌ Отмена", callback_data="users_broadcast:cancel"))
+    return builder.as_markup()
