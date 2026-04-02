@@ -1885,11 +1885,12 @@ async def command_start_handler(message: Message) -> None:
                 file_id = message.video_note.file_id
                 file_type = 'video_note'
 
-            db.add_to_trackers_messages(message.from_user.id, message.chat.id, message.html_text, file_id, file_type, False, time.time(), f"https://t.me/c/{-(message.chat.id+1000000000000)}/{message.message_id}")
+            tracker_message_id = db.add_to_trackers_messages(message.from_user.id, message.chat.id, message.html_text, file_id, file_type, False, time.time(), f"https://t.me/c/{-(message.chat.id+1000000000000)}/{message.message_id}")
 
             # ✅ сервер рассылает событие (источник истины)
             message_payload = {
                 "type": "message",
+                "message_id": tracker_message_id,
                 "text": message.html_text,
                 "sender_id": "0",
                 "unix_time": int(time.time()),

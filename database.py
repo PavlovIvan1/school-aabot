@@ -531,6 +531,7 @@ class MySQL:
             """INSERT INTO trackers_messages (tg_id, chat_id, message_text, file_id, file_type, from_user, unix_time, message_link) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
             (tg_id, chat_id, message_text, file_id, file_type, from_user, unix_time, message_link))
         self.database.commit()
+        return self.cursor.lastrowid
 
     def get_trackers_messages_by_tg_id(self, tg_id: int):
         self.cursor.execute("SELECT * FROM trackers_messages WHERE tg_id = %s AND (is_deleted IS NULL OR is_deleted = FALSE) ORDER BY message_id ASC", (tg_id,))

@@ -631,7 +631,7 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
             unix_time = int(time.time())
 
             # Сохраняем в БД
-            db.add_to_trackers_messages(
+            tracker_message_id = db.add_to_trackers_messages(
                 user_id,
                 tracker_chat_id,
                 text,
@@ -645,6 +645,7 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
             # Подготовка payload
             message_payload = {
                 "type": "message",
+                "message_id": tracker_message_id,
                 "text": text,
                 "sender_id": user_id,
                 "unix_time": unix_time
@@ -795,7 +796,7 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
             unix_time = int(time.time())
 
             # ✅ сохраняем сообщение
-            db.add_to_trackers_messages(
+            tracker_message_id = db.add_to_trackers_messages(
                 user_id,
                 tracker_chat_id,
                 text,
@@ -809,6 +810,7 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
             # ✅ сервер рассылает событие (источник истины)
             message_payload = {
                 "type": "message",
+                "message_id": tracker_message_id,
                 "text": text,
                 "sender_id": "0",
                 "unix_time": unix_time

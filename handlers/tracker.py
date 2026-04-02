@@ -312,11 +312,12 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
     except Exception:
         pass
 
-    db.add_to_trackers_messages(message.from_user.id, message_chat_id_for_db, message.html_text, file_id, file_type, True, time.time(), None if msg_1 is None else f"https://t.me/c/{-(msg_1.chat.id+1000000000000)}/{msg_1.message_id}")
+    tracker_message_id = db.add_to_trackers_messages(message.from_user.id, message_chat_id_for_db, message.html_text, file_id, file_type, True, time.time(), None if msg_1 is None else f"https://t.me/c/{-(msg_1.chat.id+1000000000000)}/{msg_1.message_id}")
 
     if str(message.from_user.id) in config.ws_connections:
         message_payload = {
             "type": "message",
+            "message_id": tracker_message_id,
             "text": message.html_text,
             "sender_id": str(message.from_user.id),
             "unix_time": time.time(),

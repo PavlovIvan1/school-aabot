@@ -336,10 +336,13 @@ input.addEventListener("input", () => {
 
 /* ---------- MESSAGE RENDER ---------- */
 
-function addMessage(text, type, unixTime=null, imageUrl=null) {
+function addMessage(text, type, unixTime=null, imageUrl=null, messageId=null) {
 
   const msg = document.createElement("div");
   msg.classList.add("message", type);
+  if (messageId !== null && messageId !== undefined) {
+    msg.setAttribute('data-message-id', String(messageId));
+  }
 
   const time = unixTime
       ? new Date(unixTime * 1000).toLocaleString()
@@ -534,7 +537,8 @@ function connectWS() {
         data.text,
         messageType,
         data.unix_time,
-        data.image || null
+        data.image || null,
+        data.message_id || null
       );
     }
   };
