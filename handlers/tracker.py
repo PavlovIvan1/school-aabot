@@ -10,7 +10,7 @@ from aiogram.filters import StateFilter
 from aiogram import BaseMiddleware
 from aiogram.types import InputMediaVideo, InputMediaDocument
 from aiogram.types import TelegramObject, FSInputFile
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError
 
 import datetime
 import asyncio
@@ -155,6 +155,40 @@ async def send_media_group(chat_id: int, bot):
         )
     ]
     await bot.send_media_group(chat_id, media)
+
+
+async def send_message_to_tracker_with_retry(
+    message: Message,
+    tracker_chat_id: int,
+    header_text: str,
+    max_attempts: int = 3,
+):
+    last_error = None
+
+    for attempt in range(max_attempts):
+        try:
+            tracker_message = await message.bot.send_message(
+                chat_id=tracker_chat_id,
+                text=header_text,
+                reply_markup=keyboard.web_app_tracker_chat_keyboard(message.from_user.id),
+                request_timeout=20,
+            )
+            await message.bot.forward_message(
+                chat_id=tracker_chat_id,
+                from_chat_id=message.chat.id,
+                message_id=message.message_id,
+                request_timeout=20,
+            )
+            return tracker_message
+        except Exception as exc:
+            last_error = exc
+            is_retryable = isinstance(exc, (TelegramNetworkError, asyncio.TimeoutError))
+            if attempt < max_attempts - 1 and is_retryable:
+                await asyncio.sleep(1.5 * (attempt + 1))
+                continue
+            raise
+
+    raise last_error if last_error is not None else RuntimeError("Unknown tracker delivery error")
             
 
 @tracker_router.callback_query(F.data.startswith('write_tracker'))
@@ -240,24 +274,45 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
         file_type = 'video_note'
 
     msg_1 = None
+    delivered_to_tracker = False
 
     try:
         email_key = user_data[0]["email"].lower().strip()
-        msg_1 = await message.bot.send_message(config.USERS_ADDITIONAL_INFO[email_key]["tracker_chat_id"], f'⬇️ {message.from_user.full_name} @{message.from_user.username} ({email_key} Поток: {users_flow}) отправил сообщение (Техническая информация: {message.from_user.id}) ⬇️', reply_markup=keyboard.web_app_tracker_chat_keyboard(message.from_user.id))
-        await message.bot.forward_message(config.USERS_ADDITIONAL_INFO[email_key]["tracker_chat_id"], message.chat.id, message.message_id)
+        tracker_chat_id_raw = config.USERS_ADDITIONAL_INFO[email_key]["tracker_chat_id"]
+        tracker_chat_id = int(tracker_chat_id_raw)
+        msg_1 = await send_message_to_tracker_with_retry(
+            message=message,
+            tracker_chat_id=tracker_chat_id,
+            header_text=f'⬇️ {message.from_user.full_name} @{message.from_user.username} ({email_key} Поток: {users_flow}) отправил сообщение (Техническая информация: {message.from_user.id}) ⬇️',
+        )
+        delivered_to_tracker = True
     except Exception:
         error_message = f"⚠️ Ошибка при отправке сообщения трекеру\n\nПользователь: {message.from_user.full_name} (@{message.from_user.username}, ID: {message.from_user.id})\nEmail: {user_data[0]['email'].lower()}\nПоток: {users_flow}\n\nТекст сообщения: {message.html_text or '(пусто)'}\n\nОшибка:\n{traceback.format_exc()}"
         try:
-            for admin_id in config.ADMINS_LIST:
-                await message.bot.send_message(admin_id, error_message)
+            await message.bot.send_message(config.LOG_CHAT_ID, error_message)
         except:
             pass
         print(traceback.format_exc())
         pass
 
-    msg = await message.answer('✅ Ваше сообщение отправлено трекеру', reply_markup=keyboard.tracker_keyboard(message.from_user.id))
+    if delivered_to_tracker:
+        response_text = '✅ Ваше сообщение отправлено трекеру'
+    else:
+        response_text = '✅ Сообщение получено. Передадим трекеру в ближайшее время'
+
+    msg = await message.answer(response_text, reply_markup=keyboard.tracker_keyboard(message.from_user.id))
     await state.update_data(message_id=msg.message_id)
-    db.add_to_trackers_messages(message.from_user.id, message.chat.id, message.html_text, file_id, file_type, True, time.time(), None if msg_1 is None else f"https://t.me/c/{-(msg_1.chat.id+1000000000000)}/{msg_1.message_id}")
+
+    message_chat_id_for_db = message.chat.id
+    try:
+        email_key = user_data[0]["email"].lower().strip()
+        tracker_chat_id_raw = config.USERS_ADDITIONAL_INFO.get(email_key, {}).get("tracker_chat_id")
+        if tracker_chat_id_raw is not None and str(tracker_chat_id_raw).lstrip('-').isdigit():
+            message_chat_id_for_db = int(tracker_chat_id_raw)
+    except Exception:
+        pass
+
+    db.add_to_trackers_messages(message.from_user.id, message_chat_id_for_db, message.html_text, file_id, file_type, True, time.time(), None if msg_1 is None else f"https://t.me/c/{-(msg_1.chat.id+1000000000000)}/{msg_1.message_id}")
 
     if str(message.from_user.id) in config.ws_connections:
         message_payload = {

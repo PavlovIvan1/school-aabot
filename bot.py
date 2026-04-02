@@ -411,10 +411,11 @@ async def handle_alice_request(request: Request):
         html_messages = ""
         tracker_chat_id_for_delete = ""
 
-        if len(tracker_messages_list) != 0:
-            last_chat_id = tracker_messages_list[-1].get("chat_id")
-            if last_chat_id is not None:
-                tracker_chat_id_for_delete = str(last_chat_id)
+        load_users_additional_info()
+        user_email = (user_data[0].get("email") or "").lower().strip()
+        tracker_chat_id_raw = config.USERS_ADDITIONAL_INFO.get(user_email, {}).get("tracker_chat_id")
+        if tracker_chat_id_raw is not None and str(tracker_chat_id_raw).lstrip('-').isdigit():
+            tracker_chat_id_for_delete = str(int(tracker_chat_id_raw))
 
         for message in tracker_messages_list:
             message_from_type = "incoming" if message["from_user"] else "outgoing"
@@ -1719,7 +1720,20 @@ async def delete_tracker_message(request: Request):
         if message_data is None:
             return JSONResponse(content={"success": False, "error": "Message not found"}, status_code=404)
 
-        if str(message_data.get("chat_id")) != str(actor_chat_id):
+        can_delete = str(message_data.get("chat_id")) == str(actor_chat_id)
+
+        if not can_delete:
+            load_users_additional_info()
+            tg_id = message_data.get("tg_id")
+            if tg_id is not None:
+                user_rows = db.get_user(int(tg_id))
+                if len(user_rows) != 0:
+                    message_owner_email = (user_rows[0].get("email") or "").lower().strip()
+                    assigned_tracker_chat_id = config.USERS_ADDITIONAL_INFO.get(message_owner_email, {}).get("tracker_chat_id")
+                    if assigned_tracker_chat_id is not None and str(assigned_tracker_chat_id) == str(actor_chat_id):
+                        can_delete = True
+
+        if not can_delete:
             return JSONResponse(content={"success": False, "error": "You can delete only messages from your tracker chat"}, status_code=403)
 
         db.delete_tracker_message(int(message_id), int(actor_chat_id))
