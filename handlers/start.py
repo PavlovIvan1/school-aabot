@@ -36,7 +36,7 @@ AUTHORIZED_BROADCAST_USER_ID = 5201430878
 BROADCAST_BATCH_SIZE = 500
 BROADCAST_DELAY_SECONDS = 60
 BROADCAST_TASK = None
-HIDE_LEARNING_BUTTONS_FROM_FLOW = 15.10
+HIDE_LEARNING_BUTTONS_FROM_FLOW = "15.10"
 
 
 def load_users_additional_info_from_file() -> None:
@@ -340,18 +340,37 @@ def chunked(values: List[int], chunk_size: int) -> List[List[int]]:
     return [values[i:i + chunk_size] for i in range(0, len(values), chunk_size)]
 
 
-def parse_flow_value(flow_value: Any) -> Optional[float]:
-    try:
-        if flow_value is None:
-            return None
-        return float(str(flow_value).replace(",", ".").strip())
-    except Exception:
+def parse_flow_value(flow_value: Any) -> Optional[tuple[int, int]]:
+    if flow_value is None:
         return None
+
+    raw = str(flow_value).strip().replace(",", ".")
+    if len(raw) == 0:
+        return None
+
+    parts = raw.split(".")
+    if len(parts) == 1:
+        if not parts[0].isdigit():
+            return None
+        return (int(parts[0]), 0)
+
+    major = parts[0]
+    minor = parts[1]
+
+    if not major.isdigit() or not minor.isdigit():
+        return None
+
+    return (int(major), int(minor))
 
 
 def should_hide_learning_buttons(flow_value: Any) -> bool:
     parsed = parse_flow_value(flow_value)
-    return parsed is not None and parsed >= HIDE_LEARNING_BUTTONS_FROM_FLOW
+    threshold = parse_flow_value(HIDE_LEARNING_BUTTONS_FROM_FLOW)
+
+    if parsed is None or threshold is None:
+        return False
+
+    return parsed >= threshold
 
 
 async def run_students_broadcast(bot, initiator_user_id: int, text: str):
