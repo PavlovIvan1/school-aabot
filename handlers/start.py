@@ -36,6 +36,7 @@ AUTHORIZED_BROADCAST_USER_ID = 5201430878
 BROADCAST_BATCH_SIZE = 500
 BROADCAST_DELAY_SECONDS = 60
 BROADCAST_TASK = None
+HIDE_LEARNING_BUTTONS_FROM_FLOW = 15.10
 
 
 def load_users_additional_info_from_file() -> None:
@@ -339,6 +340,20 @@ def chunked(values: List[int], chunk_size: int) -> List[List[int]]:
     return [values[i:i + chunk_size] for i in range(0, len(values), chunk_size)]
 
 
+def parse_flow_value(flow_value: Any) -> Optional[float]:
+    try:
+        if flow_value is None:
+            return None
+        return float(str(flow_value).replace(",", ".").strip())
+    except Exception:
+        return None
+
+
+def should_hide_learning_buttons(flow_value: Any) -> bool:
+    parsed = parse_flow_value(flow_value)
+    return parsed is not None and parsed >= HIDE_LEARNING_BUTTONS_FROM_FLOW
+
+
 async def run_students_broadcast(bot, initiator_user_id: int, text: str):
     global BROADCAST_TASK
 
@@ -546,18 +561,24 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
             return
         
     has_tracker_unread = await get_tracker_unread_cached(message.from_user.id)
+    user_flow = db.get_flow_by_email(user_data[0]['email'])
+    hide_learning_buttons = should_hide_learning_buttons(user_flow)
 
     welcome_text = """Рады видеть тебя в обучении «Заработок на Reels»📱
 
-Здесь твои домашние задания, связь с личным трекером и поддержкой. Всё в одном месте — удобно и без лишних поисков
+Здесь связь с личным трекером, поддержка и психолог. Все в одном месте - удобно и без лишних поисков
 
-Выбирай нужный раздел ниже и нажимай на кнопку👇"""
+Выбирай нужный раздел нише и нажимай на кнопку👇🏽"""
 
     try:
         await message.answer_photo(
             photo=FSInputFile("files/start.jpg"),
             caption=welcome_text,
-            reply_markup=keyboard.main_keyboard(include_dashboards=is_staff, has_tracker_unread=has_tracker_unread),
+            reply_markup=keyboard.main_keyboard(
+                include_dashboards=is_staff,
+                has_tracker_unread=has_tracker_unread,
+                hide_learning_buttons=hide_learning_buttons,
+            ),
         )
         print(f"[START] welcome(photo) sent uid={message.from_user.id}")
     except TelegramRetryAfter as e:
@@ -565,7 +586,11 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
         try:
             await message.answer(
                 welcome_text,
-                reply_markup=keyboard.main_keyboard(include_dashboards=is_staff, has_tracker_unread=has_tracker_unread),
+                reply_markup=keyboard.main_keyboard(
+                    include_dashboards=is_staff,
+                    has_tracker_unread=has_tracker_unread,
+                    hide_learning_buttons=hide_learning_buttons,
+                ),
             )
             print(f"[START] welcome(text after retry) sent uid={message.from_user.id}")
         except Exception:
@@ -575,7 +600,11 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
         try:
             await message.answer(
                 welcome_text,
-                reply_markup=keyboard.main_keyboard(include_dashboards=is_staff, has_tracker_unread=has_tracker_unread),
+                reply_markup=keyboard.main_keyboard(
+                    include_dashboards=is_staff,
+                    has_tracker_unread=has_tracker_unread,
+                    hide_learning_buttons=hide_learning_buttons,
+                ),
             )
             print(f"[START] welcome(text fallback) sent uid={message.from_user.id}")
         except Exception:
@@ -600,19 +629,35 @@ async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
         pass
 
     has_tracker_unread = await get_tracker_unread_cached(call.from_user.id)
+    user_data = db.get_user(call.from_user.id)
+    user_flow = db.get_flow_by_email(user_data[0]['email']) if len(user_data) != 0 else None
+    hide_learning_buttons = should_hide_learning_buttons(user_flow)
+
+    main_caption = """Рады видеть тебя в обучении «Заработок на Reels»📱
+
+Здесь связь с личным трекером, поддержка и психолог. Все в одном месте - удобно и без лишних поисков
+
+Выбирай нужный раздел нише и нажимай на кнопку👇🏽"""
 
     try:
-        await call.message.answer_photo(photo=FSInputFile("files/start.jpg"), caption="""Рады видеть тебя в обучении «Заработок на Reels»📱
-
-Здесь твои домашние задания, связь с личным трекером и поддержкой. Всё в одном месте — удобно и без лишних поисков
-
-Выбирай нужный раздел ниже и нажимай на кнопку👇""", reply_markup=keyboard.main_keyboard(include_dashboards=is_staff, has_tracker_unread=has_tracker_unread))
+        await call.message.answer_photo(
+            photo=FSInputFile("files/start.jpg"),
+            caption=main_caption,
+            reply_markup=keyboard.main_keyboard(
+                include_dashboards=is_staff,
+                has_tracker_unread=has_tracker_unread,
+                hide_learning_buttons=hide_learning_buttons,
+            ),
+        )
     except TelegramRetryAfter:
-        await call.message.answer("""Рады видеть тебя в обучении «Заработок на Reels»📱
-
-Здесь твои домашние задания, связь с личным трекером и поддержкой. Всё в одном месте — удобно и без лишних поисков
-
-Выбирай нужный раздел ниже и нажимай на кнопку👇""", reply_markup=keyboard.main_keyboard(include_dashboards=is_staff, has_tracker_unread=has_tracker_unread))
+        await call.message.answer(
+            main_caption,
+            reply_markup=keyboard.main_keyboard(
+                include_dashboards=is_staff,
+                has_tracker_unread=has_tracker_unread,
+                hide_learning_buttons=hide_learning_buttons,
+            ),
+        )
 
 
 @start_router.callback_query(F.data == 'study_menu')
@@ -901,11 +946,13 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
         except Exception as e:
             print(f"Ошибка при добавлении в Google Таблицу: {e}")
 
-        if float(users_flow) >= 14.3:
+        hide_learning_buttons = should_hide_learning_buttons(users_flow)
+
+        if float(users_flow) >= 14.3 and not hide_learning_buttons:
             await message.answer_document(FSInputFile('files/Инструкция по чат боту.pdf'))
 
         await message.answer('''Проверка твоего аккаунта прошла успешно, ты можешь приступить к выполнению домашних заданий.
-Увидимся в рекомендациях!''', reply_markup=keyboard.main_keyboard())
+Увидимся в рекомендациях!''', reply_markup=keyboard.main_keyboard(include_dashboards=is_staff, hide_learning_buttons=hide_learning_buttons))
         
         try:
             await message.bot.send_message(config.LOG_CHAT_ID, f'Новый пользователь в боте: {message.from_user.full_name} @{message.from_user.username} (ID: {message.from_user.id})\nПочта: {message.text.lower()}')

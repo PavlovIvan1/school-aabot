@@ -1,18 +1,20 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
-def main_keyboard(include_dashboards=False, has_tracker_unread=False) -> ReplyKeyboardMarkup:
+def main_keyboard(include_dashboards=False, has_tracker_unread=False, hide_learning_buttons=False) -> ReplyKeyboardMarkup:
     builder = InlineKeyboardBuilder()
 
     tracker_button_text = "✉️ Написать личному трекеру"
     if has_tracker_unread:
         tracker_button_text += " 🔔"
     
-    builder.row(InlineKeyboardButton(text="📚 Задания к урокам", callback_data="study_menu"))
+    if not hide_learning_buttons:
+        builder.row(InlineKeyboardButton(text="📚 Задания к урокам", callback_data="study_menu"))
     builder.row(InlineKeyboardButton(text=tracker_button_text, callback_data="write_tracker"))
     builder.row(InlineKeyboardButton(text="📝 Помощь психолога", callback_data="get_psychologist"))
     builder.row(InlineKeyboardButton(text="💬 Обратиться в поддержку", callback_data="get_support:menu"))
-    builder.row(InlineKeyboardButton(text="ℹ️ Инструкция", callback_data="get_instruction"))
+    if not hide_learning_buttons:
+        builder.row(InlineKeyboardButton(text="ℹ️ Инструкция", callback_data="get_instruction"))
 
     if include_dashboards:
         builder.row(InlineKeyboardButton(text="📊 Дашборд менторов", web_app=WebAppInfo(url="https://rb.infinitydev.tw1.su/mentor_dashboard")))
