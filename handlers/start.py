@@ -1435,26 +1435,81 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
     except Exception:
         pass
 
+    homework_chat_from_manual_map = None
+    try:
+        tracker_to_homework = getattr(config, "TRACKER_TO_HOMEWORK_CHAT_MAP", {})
+        mapped_chat_raw = None
+
+        if tracker_chat_id is not None:
+            mapped_chat_raw = tracker_to_homework.get(str(tracker_chat_id))
+            if mapped_chat_raw is None:
+                mapped_chat_raw = tracker_to_homework.get(tracker_chat_id)
+
+        if mapped_chat_raw is not None and str(mapped_chat_raw).lstrip('-').isdigit():
+            homework_chat_from_manual_map = int(mapped_chat_raw)
+    except Exception:
+        pass
+
     SEND_CHAT_ID = None
+    send_chat_source = ""
+
     if homework_chat_from_config is not None and (tracker_chat_id is None or homework_chat_from_config != tracker_chat_id):
         SEND_CHAT_ID = homework_chat_from_config
+        send_chat_source = "homework_chat_id_from_users_sheet"
+    elif homework_chat_from_manual_map is not None and (tracker_chat_id is None or homework_chat_from_manual_map != tracker_chat_id):
+        SEND_CHAT_ID = homework_chat_from_manual_map
+        send_chat_source = "manual_tracker_to_homework_map"
     elif homework_chat_from_access is not None and (tracker_chat_id is None or homework_chat_from_access != tracker_chat_id):
         SEND_CHAT_ID = homework_chat_from_access
+        send_chat_source = "users_access_chat_id"
     elif homework_chat_from_config is not None:
         SEND_CHAT_ID = homework_chat_from_config
+        send_chat_source = "homework_chat_id_equals_tracker_chat"
+    elif homework_chat_from_manual_map is not None:
+        SEND_CHAT_ID = homework_chat_from_manual_map
+        send_chat_source = "manual_map_equals_tracker_chat"
     elif homework_chat_from_access is not None:
         SEND_CHAT_ID = homework_chat_from_access
+        send_chat_source = "users_access_chat_id_equals_tracker_chat"
+    elif tracker_chat_id is not None:
+        SEND_CHAT_ID = tracker_chat_id
+        send_chat_source = "tracker_chat_fallback"
 
     if SEND_CHAT_ID is None:
         await message.answer("Не удалось определить чат для проверки ДЗ. Напишите в поддержку.")
         try:
             await message.bot.send_message(
                 config.LOG_CHAT_ID,
-                f"⚠️ Не удалось определить чат ДЗ для {email_key}. tracker_chat_id={tracker_chat_id}, homework_chat_from_config={homework_chat_from_config}, homework_chat_from_access={homework_chat_from_access}"
+                f"⚠️ Не удалось определить валидный чат ДЗ для {email_key}. "
+                f"tracker_chat_id={tracker_chat_id}, "
+                f"homework_chat_from_config={homework_chat_from_config}, "
+                f"homework_chat_from_access={homework_chat_from_access}, "
+                f"homework_chat_from_manual_map={homework_chat_from_manual_map}. "
+                f"Причина: все источники chat_id пустые/некорректные."
             )
         except Exception:
             pass
         return
+
+    if send_chat_source in [
+        "homework_chat_id_equals_tracker_chat",
+        "manual_map_equals_tracker_chat",
+        "users_access_chat_id_equals_tracker_chat",
+        "tracker_chat_fallback",
+    ]:
+        try:
+            await message.bot.send_message(
+                config.LOG_CHAT_ID,
+                f"⚠️ Fallback отправки ДЗ в чат коммуникации для {email_key}: "
+                f"source={send_chat_source}, send_chat_id={SEND_CHAT_ID}, "
+                f"tracker_chat_id={tracker_chat_id}, "
+                f"homework_chat_from_config={homework_chat_from_config}, "
+                f"homework_chat_from_access={homework_chat_from_access}, "
+                f"homework_chat_from_manual_map={homework_chat_from_manual_map}"
+            )
+        except Exception:
+            pass
+
     homework_name = (db.get_lesson(str(state_data["lesson_id"]), users_flow))["name"]
 
     is_do_homework = db.get_homework_by_lesson_id(message.from_user.id, state_data["lesson_id"])

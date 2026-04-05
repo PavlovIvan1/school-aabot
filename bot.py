@@ -2158,11 +2158,34 @@ async def check_info():
         table_2_data = await table_2.get_all_values()
 
         for row in table_2_data[1:]:
-            if row[0] is None or row[1] is None or row[2] is None or len(row[0]) == 0 or len(row[1]) == 0 or not is_int(row[1]) or len(row[2]) == 0:
+            if len(row) < 5:
                 continue
-            
-            email_key = clean_string(row[0].lower().strip())
-            config.USERS_ADDITIONAL_INFO[email_key] = {"homework_chat_id": row[1], "tracker_chat_id": row[4], "tariff": row[5]}
+
+            email_raw = row[0]
+            flow_raw = row[2]
+            tracker_chat_raw = row[4]
+            homework_chat_raw = row[1] if len(row) > 1 else ""
+            tariff_raw = row[5] if len(row) > 5 else ""
+
+            if email_raw is None or flow_raw is None:
+                continue
+
+            if len(str(email_raw).strip()) == 0 or len(str(flow_raw).strip()) == 0:
+                continue
+
+            if tracker_chat_raw is None or len(str(tracker_chat_raw).strip()) == 0 or not is_int(str(tracker_chat_raw).strip()):
+                continue
+
+            homework_chat_value = ""
+            if homework_chat_raw is not None and len(str(homework_chat_raw).strip()) != 0 and is_int(str(homework_chat_raw).strip()):
+                homework_chat_value = str(homework_chat_raw).strip()
+
+            email_key = clean_string(str(email_raw).lower().strip())
+            config.USERS_ADDITIONAL_INFO[email_key] = {
+                "homework_chat_id": homework_chat_value,
+                "tracker_chat_id": str(tracker_chat_raw).strip(),
+                "tariff": "" if tariff_raw is None else str(tariff_raw).strip(),
+            }
         dump_users_additional_info()
     except Exception as e:
         print(f"Ошибка при обновлении: {e}")
@@ -2376,12 +2399,44 @@ async def check_info():
                     for idx, row in enumerate(table_2_data[1:], start=1):
                         if idx % 25 == 0:
                             await asyncio.sleep(0)
-                        if row[0] is None or row[1] is None or row[2] is None or len(row[0]) == 0 or len(row[1]) == 0 or not is_int(row[1]) or len(row[2]) == 0:
+
+                        if len(row) < 5:
                             continue
-                        
-                        email_key = clean_string(row[0].lower().strip())
-                        if email_key not in config.USERS_ADDITIONAL_INFO or row[1] != config.USERS_ADDITIONAL_INFO[email_key].get("homework_chat_id", "") or row[4] != config.USERS_ADDITIONAL_INFO[email_key]["tracker_chat_id"] or row[5] != config.USERS_ADDITIONAL_INFO[email_key]["tariff"]: # TODO оптимизировать
-                            config.USERS_ADDITIONAL_INFO[email_key] = {"homework_chat_id": row[1], "tracker_chat_id": row[4], "tariff": row[5]}
+
+                        email_raw = row[0]
+                        flow_raw = row[2]
+                        tracker_chat_raw = row[4]
+                        homework_chat_raw = row[1] if len(row) > 1 else ""
+                        tariff_raw = row[5] if len(row) > 5 else ""
+
+                        if email_raw is None or flow_raw is None:
+                            continue
+
+                        if len(str(email_raw).strip()) == 0 or len(str(flow_raw).strip()) == 0:
+                            continue
+
+                        if tracker_chat_raw is None or len(str(tracker_chat_raw).strip()) == 0 or not is_int(str(tracker_chat_raw).strip()):
+                            continue
+
+                        homework_chat_value = ""
+                        if homework_chat_raw is not None and len(str(homework_chat_raw).strip()) != 0 and is_int(str(homework_chat_raw).strip()):
+                            homework_chat_value = str(homework_chat_raw).strip()
+
+                        email_key = clean_string(str(email_raw).lower().strip())
+                        row_info = {
+                            "homework_chat_id": homework_chat_value,
+                            "tracker_chat_id": str(tracker_chat_raw).strip(),
+                            "tariff": "" if tariff_raw is None else str(tariff_raw).strip(),
+                        }
+
+                        current_info = config.USERS_ADDITIONAL_INFO.get(email_key, {})
+                        if (
+                            email_key not in config.USERS_ADDITIONAL_INFO
+                            or row_info["homework_chat_id"] != current_info.get("homework_chat_id", "")
+                            or row_info["tracker_chat_id"] != current_info.get("tracker_chat_id", "")
+                            or row_info["tariff"] != current_info.get("tariff", "")
+                        ):
+                            config.USERS_ADDITIONAL_INFO[email_key] = row_info
                             print(f'Добавлено в ЛС трекеров: {row}')
                     dump_users_additional_info()
                         

@@ -33,7 +33,18 @@ SHEETS_DATA = {
     "tracker_ids": []
 }
 
-USERS_ADDITIONAL_INFO = {} # {email: {"tracker_chat_id", "tariff"}}
+USERS_ADDITIONAL_INFO = {} # {email: {"homework_chat_id", "tracker_chat_id", "tariff"}}
+
+# Временный ручной маппинг: чат коммуникации трекера -> чат ДЗ трекера.
+# Используется как fallback, если у ученика пустой/некорректный homework_chat_id.
+TRACKER_TO_HOMEWORK_CHAT_MAP = {
+    # "-1001111111111": "-1002222222222",
+    # Проблемный трекер:
+    # communication chat -> homework chat
+    "-1003763028137": "-1002860708397",
+    # tracker user id -> homework chat (доп. страховка)
+    "1297197915": "-1002860708397",
+}
 
 ws_connections = {}  # user_id -> websocket
 ws_connections_support = {}
