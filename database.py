@@ -2,30 +2,8 @@ import mysql.connector
 import config
 import json
 import time
-import re
 
 class MySQL:
-
-    @staticmethod
-    def _normalize_text(value):
-        return str(value).strip()
-
-    @classmethod
-    def _normalize_flow(cls, value):
-        raw = cls._normalize_text(value).replace(",", ".")
-        if len(raw) == 0:
-            return ""
-
-        match = re.search(r"\d+(?:\.\d+)?", raw)
-        return match.group(0) if match is not None else raw
-
-    @classmethod
-    def _extract_flows(cls, value):
-        raw = cls._normalize_text(value)
-        matches = re.findall(r"\d+[\.,]\d+|\d+", raw)
-        if len(matches) == 0 and len(raw) != 0:
-            return [raw]
-        return [item.replace(",", ".").strip() for item in matches if item.strip()]
 
     def __init__(self):
         self.database = mysql.connector.connect(
@@ -210,49 +188,45 @@ class MySQL:
         return self.cursor.fetchone()"""
     
     def get_lesson(self, lesson_id, flow):
-        flow_value = self._normalize_flow(flow)
-        lesson_id_value = self._normalize_text(lesson_id)
+        flow_value = str(flow).strip()
         for i in config.SHEETS_DATA["lessons"]:
-            lesson_flows = self._extract_flows(i.get("flow", ""))
-            if self._normalize_text(i.get("lesson_id", "")) == lesson_id_value and flow_value in lesson_flows:
+            lesson_flows = [f.strip() for f in str(i.get("flow", "")).split(",") if f.strip()]
+            if i["lesson_id"] == lesson_id and flow_value in lesson_flows:
                 return i
              
         return None
     
     def get_lessons(self, module_id, flow):
         lessons = []
-        flow_value = self._normalize_flow(flow)
-        module_id_value = self._normalize_text(module_id)
+        flow_value = str(flow).strip()
 
         for i in config.SHEETS_DATA["lessons"]:
-            lesson_flows = self._extract_flows(i.get("flow", ""))
-            if self._normalize_text(i.get("module_id", "")) == module_id_value and flow_value in lesson_flows:
+            lesson_flows = [f.strip() for f in str(i.get("flow", "")).split(",") if f.strip()]
+            if i["module_id"] == module_id and flow_value in lesson_flows:
                 lessons.append(i)
         
         return sorted(lessons, key=lambda x: int(x["lesson_id"]))
     
     def get_module_name(self, lesson_id, flow):
-        flow_value = self._normalize_flow(flow)
-        lesson_id_value = self._normalize_text(lesson_id)
+        flow_value = str(flow).strip()
         for i in config.SHEETS_DATA["lessons"]:
-            lesson_flows = self._extract_flows(i.get("flow", ""))
-            if self._normalize_text(i.get("lesson_id", "")) == lesson_id_value and flow_value in lesson_flows:
+            lesson_flows = [f.strip() for f in str(i.get("flow", "")).split(",") if f.strip()]
+            if i["lesson_id"] == lesson_id and flow_value in lesson_flows:
                 return [self.get_module(i["module_id"], flow_value), i]
     
     def get_module(self, module_id, flow):
-        flow_value = self._normalize_flow(flow)
-        module_id_value = self._normalize_text(module_id)
+        flow_value = str(flow).strip()
         for i in config.SHEETS_DATA["modules"]:
-            module_flows = self._extract_flows(i.get("flow", ""))
-            if self._normalize_text(i.get("id", "")) == module_id_value and flow_value in module_flows:
+            module_flows = [f.strip() for f in str(i.get("flow", "")).split(",") if f.strip()]
+            if i["id"] == module_id and flow_value in module_flows:
                 return i
             
     def get_required_homework_ids(self, flow):
-        flow_value = self._normalize_flow(flow)
+        flow_value = str(flow).strip()
         homework_ids: list[str] = []
 
         for i in config.SHEETS_DATA["required_tasks"]:
-            row_flows = self._extract_flows(i.get("flow", ""))
+            row_flows = [f.strip() for f in str(i.get("flow", "")).split(",") if f.strip()]
             if flow_value in row_flows:
                 lesson_ids_raw = str(i.get("lesson_ids", "")).strip()
                 if len(lesson_ids_raw) == 0:
@@ -386,11 +360,11 @@ class MySQL:
         return self.cursor.fetchall()
     
     def get_modules(self, flow):
-        flow_value = self._normalize_flow(flow)
+        flow_value = str(flow).strip()
         modules = []
 
         for i in config.SHEETS_DATA["modules"]:
-            module_flows = self._extract_flows(i.get("flow", ""))
+            module_flows = [f.strip() for f in str(i.get("flow", "")).split(",") if f.strip()]
             if flow_value in module_flows:
                 modules.append(i)
         

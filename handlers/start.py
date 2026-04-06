@@ -761,9 +761,6 @@ async def command_start_handler(call: CallbackQuery) -> None:
 
 @start_router.callback_query(F.data.startswith('get_homeworks:'))
 async def command_start_handler(call: CallbackQuery) -> None:
-    # Подтягиваем свежий кэш из файла, который обновляет sync_worker.
-    load_sheets_data_from_file()
-
     homework_type = call.data.split(':')[1]
     print(homework_type)
 
@@ -1054,9 +1051,6 @@ https://t.me/addlist/de2kQMGg21piOThi
 
 @start_router.callback_query(F.data == 'get_modules')
 async def command_start_handler(call: CallbackQuery) -> None:
-    # Подтягиваем свежий кэш из файла, который обновляет sync_worker.
-    load_sheets_data_from_file()
-
     user_data = db.get_user(call.from_user.id)
     users_flow = db.get_flow_by_email(user_data[0]['email'])
 
@@ -1068,9 +1062,6 @@ async def command_start_handler(call: CallbackQuery) -> None:
 @start_router.callback_query(F.data.startswith('get_module:'))
 async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
-
-    # Подтягиваем свежий кэш из файла, который обновляет sync_worker.
-    load_sheets_data_from_file()
 
     module_id = call.data.split(':')[1]
     user_data = db.get_user(call.from_user.id)
@@ -1120,9 +1111,6 @@ async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
 
 @start_router.callback_query(F.data.startswith('get_lesson:'))
 async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
-    # Подтягиваем свежий кэш из файла, который обновляет sync_worker.
-    load_sheets_data_from_file()
-
     lesson_id = call.data.split(':')[1]
 
     homework_data = db.get_homework_by_lesson_id(call.from_user.id, lesson_id)
