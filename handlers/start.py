@@ -1650,6 +1650,36 @@ async def my_chat_id(message: types.Message):
     )
 
 
+@start_router.message(Command("list"))
+async def tracker_list_command(message: types.Message):
+    if message.chat.type not in ('group', 'supergroup'):
+        return
+
+    load_users_additional_info_from_file()
+
+    chat_id = message.chat.id
+    users_from_config = db.get_users_by_tracker_chat_id(chat_id)
+    users_from_access = db.get_users_access_emails_by_chat_id(chat_id)
+    users_from_homework = db.get_users_emails_by_homework_chat_id(chat_id)
+    users_from_messages = db.get_users_emails_by_tracker_messages_chat_id(chat_id)
+
+    users_list = list(dict.fromkeys([
+        str(email).lower().strip()
+        for email in (users_from_config + users_from_access + users_from_homework + users_from_messages)
+        if email
+    ]))
+
+    if db.is_tracker(chat_id) or len(users_list) != 0:
+        await message.reply("Список учеников трекера:", reply_markup=keyboard.web_app_tracker_list_keyboard(chat_id))
+        return
+
+    await message.reply(
+        "Команда /list недоступна в этом чате: чат не привязан к трекеру.\n"
+        f"Текущий chat_id: {chat_id}\n"
+        "Добавьте этот chat_id в лист tracker_ids и/или назначьте ученикам этот чат в таблице users."
+    )
+
+
 @start_router.message(F.text.startswith('/flapper'))
 async def flapper(message: types.Message):
     if message.from_user.id not in config.ADMINS_LIST:

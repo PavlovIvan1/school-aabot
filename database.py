@@ -631,7 +631,10 @@ class MySQL:
         return False
     
     def is_tracker(self, chat_id: int):
-        if str(chat_id) in [str(i) for i in config.MANUAL_TRACKER_USER_IDS]:
+        manual_tracker_chats = [str(i) for i in getattr(config, "MANUAL_TRACKER_CHAT_IDS", [])]
+        manual_trackers = [str(i) for i in config.MANUAL_TRACKER_USER_IDS]
+
+        if str(chat_id) in manual_tracker_chats or str(chat_id) in manual_trackers:
             return True
 
         for i in config.SHEETS_DATA["tracker_ids"]:
@@ -648,7 +651,10 @@ class MySQL:
         return None
     
     def get_tracker_by_id(self, chat_id: int):
-        if str(chat_id) in [str(i) for i in config.MANUAL_TRACKER_USER_IDS]:
+        manual_tracker_chats = [str(i) for i in getattr(config, "MANUAL_TRACKER_CHAT_IDS", [])]
+        manual_trackers = [str(i) for i in config.MANUAL_TRACKER_USER_IDS]
+
+        if str(chat_id) in manual_tracker_chats or str(chat_id) in manual_trackers:
             return {"tracker_name": "Ручной трекер", "chat_id": str(chat_id)}
 
         for i in config.SHEETS_DATA["tracker_ids"]:
@@ -666,7 +672,8 @@ class MySQL:
     def get_trackers_chats(self):
         sheet_trackers = [str(i["chat_id"]) for i in config.SHEETS_DATA["tracker_ids"]]
         manual_trackers = [str(i) for i in config.MANUAL_TRACKER_USER_IDS]
-        return list(set(sheet_trackers + manual_trackers))
+        manual_tracker_chats = [str(i) for i in getattr(config, "MANUAL_TRACKER_CHAT_IDS", [])]
+        return list(set(sheet_trackers + manual_trackers + manual_tracker_chats))
 
     def upsert_mentor_dashboard_daily(
         self,
