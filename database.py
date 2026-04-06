@@ -222,20 +222,34 @@ class MySQL:
                 return i
             
     def get_required_homework_ids(self, flow):
-        homework_ids = []
+        flow_value = str(flow).strip()
+        homework_ids: list[str] = []
 
         for i in config.SHEETS_DATA["required_tasks"]:
-            if i["flow"] == flow:
-                homework_ids = i["lesson_ids"].split(",")
+            row_flows = [f.strip() for f in str(i.get("flow", "")).split(",") if f.strip()]
+            if flow_value in row_flows:
+                lesson_ids_raw = str(i.get("lesson_ids", "")).strip()
+                if len(lesson_ids_raw) == 0:
+                    continue
+                homework_ids.extend([item.strip() for item in lesson_ids_raw.split(",") if item.strip()])
 
         homework_ids_2 = {}
 
-        for i in homework_ids:
-            if len(i.split("_")) >= 2:
-                for z in i.split("_"):
-                    homework_ids_2[(int(z))] = {"analog": [int(s) for s in i.split("_")]}
+        for item in homework_ids:
+            if "_" in item:
+                analog_ids = []
+                for part in item.split("_"):
+                    if part.isdigit():
+                        analog_ids.append(int(part))
+
+                if len(analog_ids) == 0:
+                    continue
+
+                for lesson_id in analog_ids:
+                    homework_ids_2[lesson_id] = {"analog": analog_ids}
             else:
-                homework_ids_2[(int(i))] = {}
+                if item.isdigit():
+                    homework_ids_2[int(item)] = {}
 
         return homework_ids_2
             
@@ -346,7 +360,13 @@ class MySQL:
         return self.cursor.fetchall()
     
     def get_modules(self, flow):
-        modules = [i for i in config.SHEETS_DATA["modules"] if flow in i["flow"].split(",")]
+        flow_value = str(flow).strip()
+        modules = []
+
+        for i in config.SHEETS_DATA["modules"]:
+            module_flows = [f.strip() for f in str(i.get("flow", "")).split(",") if f.strip()]
+            if flow_value in module_flows:
+                modules.append(i)
         
         def custom_sort(m):
             mod_id = int(m["id"])
