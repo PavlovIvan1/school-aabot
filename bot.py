@@ -1711,20 +1711,24 @@ async def delete_tracker_message(request: Request):
         data = await request.json()
         message_id = data.get("message_id")
         actor_chat_id = data.get("actor_chat_id")
-        if not message_id or not actor_chat_id:
-            return JSONResponse(content={"success": False, "error": "Missing message_id or actor_chat_id"}, status_code=400)
+        user_id = data.get("user_id")
+        if not message_id:
+            return JSONResponse(content={"success": False, "error": "Missing message_id"}, status_code=400)
 
         tracker_chat_ids = set(str(i) for i in db.get_trackers_chats())
-        if str(actor_chat_id) not in tracker_chat_ids:
+        if actor_chat_id and str(actor_chat_id) not in tracker_chat_ids:
             return JSONResponse(content={"success": False, "error": "Deletion allowed only for tracker chats"}, status_code=403)
 
         message_data = db.get_tracker_message_by_id(int(message_id))
         if message_data is None:
             return JSONResponse(content={"success": False, "error": "Message not found"}, status_code=404)
 
-        can_delete = str(message_data.get("chat_id")) == str(actor_chat_id)
+        can_delete = False
 
-        if not can_delete:
+        if actor_chat_id:
+            can_delete = str(message_data.get("chat_id")) == str(actor_chat_id)
+
+        if not can_delete and actor_chat_id:
             load_users_additional_info()
             tg_id = message_data.get("tg_id")
             if tg_id is not None:
@@ -1735,10 +1739,28 @@ async def delete_tracker_message(request: Request):
                     if assigned_tracker_chat_id is not None and str(assigned_tracker_chat_id) == str(actor_chat_id):
                         can_delete = True
 
+        # Фолбэк для WebApp трекера: если actor_chat_id не передан,
+        # разрешаем удаление только если сообщение принадлежит пользователю
+        # и закреплено за его tracker_chat_id.
+        if not can_delete and not actor_chat_id and user_id:
+            try:
+                requested_user_id = int(user_id)
+                message_owner_tg_id = message_data.get("tg_id")
+                if message_owner_tg_id is not None and int(message_owner_tg_id) == requested_user_id:
+                    load_users_additional_info()
+                    user_rows = db.get_user(requested_user_id)
+                    if len(user_rows) != 0:
+                        message_owner_email = (user_rows[0].get("email") or "").lower().strip()
+                        assigned_tracker_chat_id = config.USERS_ADDITIONAL_INFO.get(message_owner_email, {}).get("tracker_chat_id")
+                        if assigned_tracker_chat_id is not None and str(assigned_tracker_chat_id) == str(message_data.get("chat_id")):
+                            can_delete = True
+            except Exception:
+                pass
+
         if not can_delete:
             return JSONResponse(content={"success": False, "error": "You can delete only messages from your tracker chat"}, status_code=403)
 
-        db.delete_tracker_message(int(message_id), int(actor_chat_id))
+        db.delete_tracker_message(int(message_id), int(actor_chat_id) if actor_chat_id else None)
         return {"success": True}
     except Exception as e:
         return JSONResponse(content={"success": False, "error": str(e)}, status_code=500)

@@ -728,8 +728,11 @@ async def command_start_handler(call: CallbackQuery) -> None:
     if float(users_flow) >= 15.1 and float(users_flow) < 15.6:
         count_claps = 12
         claps_path = "files/15_1/"
-    elif float(users_flow) >= 15.6:
+    elif float(users_flow) >= 15.6 and float(users_flow) < 15.8:
         count_claps = 11
+        claps_path = "files/15_6/"
+    elif float(users_flow) >= 15.8:
+        count_claps = 8
         claps_path = "files/15_6/"
 
     if count_required_homework == 0:
@@ -1613,9 +1616,17 @@ async def send_congratulation_message(message: Message, lesson_id: int, user_id)
         await asyncio.sleep(0.5)
         await message.bot.send_document(user_id, FSInputFile(f'files/Тренды в контенте 2026.pdf'))
 
-    elif count_required_homework >= 11 and float(users_flow) >= 15.6:
+    elif count_required_homework >= 11 and float(users_flow) >= 15.6 and float(users_flow) < 15.8:
         lesson_data = db.get_lesson(str(lesson_id), users_flow)
         await message.bot.send_photo(user_id, photo=FSInputFile(f'files/15_6/{count_required_homework}.jpg'), caption="""Поздравляем!🎉 Тобой сданы все 11 обязательных заданий!🎬 Ты молодец😍
+
+Забирай свой бонус - «Тренды в контенте в 2026 году»""", parse_mode="HTML")
+        await asyncio.sleep(0.5)
+        await message.bot.send_document(user_id, FSInputFile(f'files/Тренды в контенте 2026.pdf'))
+
+    elif count_required_homework >= 8 and float(users_flow) >= 15.8:
+        lesson_data = db.get_lesson(str(lesson_id), users_flow)
+        await message.bot.send_photo(user_id, photo=FSInputFile(f'files/15_6/{count_required_homework}.jpg'), caption="""Поздравляем!🎉 Тобой сданы все 8 обязательных заданий!🎬 Ты молодец😍
 
 Забирай свой бонус - «Тренды в контенте в 2026 году»""", parse_mode="HTML")
         await asyncio.sleep(0.5)
@@ -1636,9 +1647,12 @@ async def send_congratulation_message(message: Message, lesson_id: int, user_id)
     elif float(users_flow) >= 15.1 and float(users_flow) < 15.6:
         lesson_data = db.get_lesson(str(lesson_id), users_flow)
         await message.bot.send_photo(user_id, photo=FSInputFile(f'files/15_1/{count_required_homework}.jpg'), caption=config.CONGRATULATION_MESSAGE_2.replace("<lesson_name>", lesson_data['name']), parse_mode="HTML")
-    elif float(users_flow) >= 15.6:
+    elif float(users_flow) >= 15.6 and float(users_flow) < 15.8:
         lesson_data = db.get_lesson(str(lesson_id), users_flow)
         await message.bot.send_photo(user_id, photo=FSInputFile(f'files/15_6/{count_required_homework}.jpg'), caption=config.CONGRATULATION_MESSAGE_3.replace("<lesson_name>", lesson_data['name']), parse_mode="HTML")
+    elif float(users_flow) >= 15.8:
+        lesson_data = db.get_lesson(str(lesson_id), users_flow)
+        await message.bot.send_photo(user_id, photo=FSInputFile(f'files/15_6/{count_required_homework}.jpg'), caption=config.CONGRATULATION_MESSAGE_4.replace("<lesson_name>", lesson_data['name']), parse_mode="HTML")
 
 
 @start_router.message(F.text == '/my_chat_id')
