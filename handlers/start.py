@@ -954,17 +954,18 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
         await message.answer("Пожалуйста, введите email текстовым сообщением", reply_markup=keyboard.main_keyboard(include_dashboards=is_staff))
         return
     
-    is_access = db.is_email_in_users_access(message.text.lower())
+    normalized_email = "".join((message.text or "").lower().split())
+    is_access = db.is_email_in_users_access(normalized_email)
 
     if is_access:
-        db.add_user(message.from_user.id, message.text.lower())
+        db.add_user(message.from_user.id, normalized_email)
         await state.clear()
         
-        users_flow = db.get_flow_by_email(message.text.lower())
+        users_flow = db.get_flow_by_email(normalized_email)
         
         # Добавляем пользователя в Google Таблицу
         try:
-            await add_user_to_spreadsheet(message.from_user.id, message.text.lower(), users_flow, message.bot)
+            await add_user_to_spreadsheet(message.from_user.id, normalized_email, users_flow, message.bot)
         except Exception as e:
             print(f"Ошибка при добавлении в Google Таблицу: {e}")
 
@@ -977,7 +978,7 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
 Увидимся в рекомендациях!''', reply_markup=keyboard.main_keyboard(include_dashboards=is_staff, hide_learning_buttons=hide_learning_buttons))
         
         try:
-            await message.bot.send_message(config.LOG_CHAT_ID, f'Новый пользователь в боте: {message.from_user.full_name} @{message.from_user.username} (ID: {message.from_user.id})\nПочта: {message.text.lower()}')
+            await message.bot.send_message(config.LOG_CHAT_ID, f'Новый пользователь в боте: {message.from_user.full_name} @{message.from_user.username} (ID: {message.from_user.id})\nПочта: {normalized_email}')
         except:
             pass
     else:
@@ -988,7 +989,7 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
 2. Если уверен(а), что почта указана корректно, то обязательно напиши нам в поддержку http://t.me/stepbybit''', reply_markup=keyboard.main_keyboard(include_dashboards=is_staff))
         
         try:
-            await message.bot.send_message(config.LOG_CHAT_ID, f'Ученик не может авторизоваться: {message.from_user.full_name} @{message.from_user.username} (ID: {message.from_user.id})\nПочта: {message.text.lower()}')
+            await message.bot.send_message(config.LOG_CHAT_ID, f'Ученик не может авторизоваться: {message.from_user.full_name} @{message.from_user.username} (ID: {message.from_user.id})\nПочта: {normalized_email}')
         except:
             pass
 

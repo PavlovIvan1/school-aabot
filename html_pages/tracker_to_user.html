@@ -661,7 +661,8 @@ async function confirmDelete() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message_id: selectedMessageId,
-        actor_chat_id: trackerChatId
+        actor_chat_id: trackerChatId,
+        user_id: userId
       })
     });
     
