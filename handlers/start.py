@@ -1557,7 +1557,7 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
     else:
         reply_markup = keyboard.back_from_lesson_keyboard(state_data['module_id'])
 
-    await message.answer('Твое задание отправлено трекеру на проверку✅\nОбратная связь поступит в этот бот в течении 2-3 дней', reply_markup=reply_markup)
+    await message.answer('Твое задание отправлено трекеру на проверку✅\nОбратная связь поступит в этот бот в течении 2-х дней', reply_markup=reply_markup)
 
     db.add_homework_text(message.from_user.id, state_data["lesson_id"], time.time(), message.text)
 
