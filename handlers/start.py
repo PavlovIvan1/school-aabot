@@ -731,7 +731,7 @@ async def command_start_handler(call: CallbackQuery) -> None:
     elif float(users_flow) >= 15.6 and float(users_flow) < 15.8:
         count_claps = 11
         claps_path = "files/15_6/"
-    elif float(users_flow) >= 15.8:
+    elif float(users_flow) >= 15.8 and float(users_flow) < 16:
         count_claps = 8
         claps_path = "files/15_8/"
 
@@ -1624,7 +1624,7 @@ async def send_congratulation_message(message: Message, lesson_id: int, user_id)
         await asyncio.sleep(0.5)
         await message.bot.send_document(user_id, FSInputFile(f'files/Тренды в контенте 2026.pdf'))
 
-    elif count_required_homework >= 8 and float(users_flow) >= 15.8:
+    elif count_required_homework >= 8 and float(users_flow) >= 15.8 and float(users_flow) < 16:
         lesson_data = db.get_lesson(str(lesson_id), users_flow)
         await message.bot.send_photo(user_id, photo=FSInputFile(f'files/15_8/{count_required_homework}.jpg'), caption="""Поздравляем!🎉 Тобой сданы все 8 обязательных заданий!🎬 Ты молодец😍
 
@@ -1650,7 +1650,7 @@ async def send_congratulation_message(message: Message, lesson_id: int, user_id)
     elif float(users_flow) >= 15.6 and float(users_flow) < 15.8:
         lesson_data = db.get_lesson(str(lesson_id), users_flow)
         await message.bot.send_photo(user_id, photo=FSInputFile(f'files/15_6/{count_required_homework}.jpg'), caption=config.CONGRATULATION_MESSAGE_3.replace("<lesson_name>", lesson_data['name']), parse_mode="HTML")
-    elif float(users_flow) >= 15.8:
+    elif float(users_flow) >= 15.8 and float(users_flow) < 16:
         lesson_data = db.get_lesson(str(lesson_id), users_flow)
         await message.bot.send_photo(user_id, photo=FSInputFile(f'files/15_8/{count_required_homework}.jpg'), caption=config.CONGRATULATION_MESSAGE_4.replace("<lesson_name>", lesson_data['name']), parse_mode="HTML")
 
