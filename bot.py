@@ -27,6 +27,8 @@ from handlers.psychologist import psychologist_router
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.client.default import DefaultBotProperties
+from aiogram.client.session.aiohttp import AiohttpSession
+from aiogram.exceptions import TelegramNetworkError
 from aiogram.fsm.storage.redis import RedisStorage
 from aiogram.fsm.storage.memory import MemoryStorage
 
@@ -38,7 +40,12 @@ import keyboard
 
 db = MySQL()
 
-bot = Bot(token=config.BOT_TOKEN, default=DefaultBotProperties(link_preview_is_disabled=True))
+bot_session = AiohttpSession(proxy=config.TELEGRAM_PROXY_URL)
+bot = Bot(
+    token=config.BOT_TOKEN,
+    session=bot_session,
+    default=DefaultBotProperties(link_preview_is_disabled=True)
+)
 web_process = None
 sync_process = None
 
@@ -2719,9 +2726,12 @@ async def on_startup():
     pass
 
 async def set_default_commands(bot):
-    await bot.set_my_commands([
-        types.BotCommand(command="start", description="Перезапустить бота"),
-    ])
+    try:
+        await bot.set_my_commands([
+            types.BotCommand(command="start", description="Перезапустить бота"),
+        ], request_timeout=10)
+    except TelegramNetworkError as e:
+        logging.warning(f"[BOOT] set_my_commands skipped due to network issue: {e}")
 
 async def main() -> None:
     # Dispatcher is a root router

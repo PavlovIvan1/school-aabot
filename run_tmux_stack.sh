@@ -13,6 +13,12 @@ WEB_PORT="${WEB_PORT:-443}"
 SSL_KEYFILE="${SSL_KEYFILE:-/etc/letsencrypt/live/rb.infinitydev.tw1.su/privkey.pem}"
 SSL_CERTFILE="${SSL_CERTFILE:-/etc/letsencrypt/live/rb.infinitydev.tw1.su/fullchain.pem}"
 
+# Telegram proxy defaults (can be overridden from environment)
+TELEGRAM_PROXY_URL="${TELEGRAM_PROXY_URL:-http://hXZsbn:1wHmj3@45.130.131.214:8000}"
+HTTP_PROXY="${HTTP_PROXY:-$TELEGRAM_PROXY_URL}"
+HTTPS_PROXY="${HTTPS_PROXY:-$TELEGRAM_PROXY_URL}"
+ALL_PROXY="${ALL_PROXY:-$TELEGRAM_PROXY_URL}"
+
 echo "[stack] stop old tmux sessions (if any)"
 tmux kill-session -t "$BOT_SESSION" 2>/dev/null || true
 tmux kill-session -t "$SYNC_SESSION" 2>/dev/null || true
@@ -28,11 +34,11 @@ pkill -f "uvicorn bot:app" 2>/dev/null || true
 sleep 1
 
 echo "[stack] start bot session: $BOT_SESSION"
-tmux new -d -s "$BOT_SESSION" "cd $PROJECT_DIR && python bot.py"
+tmux new -d -s "$BOT_SESSION" "cd $PROJECT_DIR && export TELEGRAM_PROXY_URL='$TELEGRAM_PROXY_URL' HTTP_PROXY='$HTTP_PROXY' HTTPS_PROXY='$HTTPS_PROXY' ALL_PROXY='$ALL_PROXY' && python bot.py"
 tmux set-option -t "$BOT_SESSION" remain-on-exit on
 
 echo "[stack] start sync session: $SYNC_SESSION"
-tmux new -d -s "$SYNC_SESSION" "cd $PROJECT_DIR && python sync_worker.py"
+tmux new -d -s "$SYNC_SESSION" "cd $PROJECT_DIR && export TELEGRAM_PROXY_URL='$TELEGRAM_PROXY_URL' HTTP_PROXY='$HTTP_PROXY' HTTPS_PROXY='$HTTPS_PROXY' ALL_PROXY='$ALL_PROXY' && python sync_worker.py"
 tmux set-option -t "$SYNC_SESSION" remain-on-exit on
 
 echo "[stack] start metrics session: $METRICS_SESSION"
