@@ -225,6 +225,13 @@ class MySQL:
         flow_value = str(flow).strip()
         homework_ids: list[str] = []
 
+        # В потоке 15.8 и 15.9 заменяем старый урок (ID 7)
+        # на новый блок «Блог и reels как система» (ID 15).
+        def normalize_required_lesson_id(lesson_id: int) -> int:
+            if flow_value in {"15.8", "15.9"} and lesson_id == 7:
+                return 15
+            return lesson_id
+
         for i in config.SHEETS_DATA["required_tasks"]:
             row_flows = [f.strip() for f in str(i.get("flow", "")).split(",") if f.strip()]
             if flow_value in row_flows:
@@ -240,16 +247,19 @@ class MySQL:
                 analog_ids = []
                 for part in item.split("_"):
                     if part.isdigit():
-                        analog_ids.append(int(part))
+                        analog_ids.append(normalize_required_lesson_id(int(part)))
 
                 if len(analog_ids) == 0:
                     continue
+
+                # После замены ID возможны дубли (например, 7 и 15 -> 15 и 15)
+                analog_ids = list(dict.fromkeys(analog_ids))
 
                 for lesson_id in analog_ids:
                     homework_ids_2[lesson_id] = {"analog": analog_ids}
             else:
                 if item.isdigit():
-                    homework_ids_2[int(item)] = {}
+                    homework_ids_2[normalize_required_lesson_id(int(item))] = {}
 
         return homework_ids_2
             
