@@ -12,6 +12,8 @@ from aiogram.types import InputMediaVideo, InputMediaDocument
 from aiogram.types import TelegramObject, FSInputFile
 from aiogram import types
 from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter, TelegramNetworkError, TelegramForbiddenError
+from google.oauth2.service_account import Credentials
+import gspread_asyncio
 import re
 
 import datetime
@@ -57,6 +59,47 @@ def load_sheets_data_from_file() -> None:
                 config.SHEETS_DATA = data
     except Exception:
         pass
+
+
+def get_sync_creds():
+    creds = Credentials.from_service_account_file("credentials.json")
+    return creds.with_scopes([
+        "https://spreadsheets.google.com/feeds",
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ])
+
+
+async def force_sync_sheets_now():
+    agcm = gspread_asyncio.AsyncioGspreadClientManager(get_sync_creds)
+    agc = await agcm.authorize()
+    ss = await agc.open_by_url(config.SPREADSHEET_URL)
+
+    new_sheets_data = {
+        "modules": [],
+        "lessons": [],
+        "homework": [],
+        "required_tasks": [],
+        "support_chats": [],
+        "mentors": [],
+        "tracker_ids": [],
+    }
+
+    for key, value in config.SHEET_IDS.items():
+        table = await ss.get_worksheet_by_id(value)
+        table_data = await table.get_all_values()
+        table_data_copy = [row[:len(config.SHEETS_COLUMNS[key])] for row in table_data]
+
+        for row in table_data_copy[1:]:
+            row_dict = {}
+            for n, cell in enumerate(row):
+                row_dict[config.SHEETS_COLUMNS[key][n]] = cell
+            new_sheets_data[key].append(row_dict)
+
+    config.SHEETS_DATA = new_sheets_data
+
+    with open("config.json", "w", encoding="utf-8") as f:
+        json.dump(config.SHEETS_DATA, f, ensure_ascii=False)
 
 
 async def get_tracker_unread_cached(tg_id: int) -> bool:
@@ -1101,6 +1144,11 @@ async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
         )
         # Пользователю не показываем техническую ошибку.
         return
+
+    # Если модуль найден, но уроки пустые, пробуем обновить кэш из файла sync_worker.
+    if len(lessons_list) == 0:
+        load_sheets_data_from_file()
+        lessons_list = db.get_lessons(module_id, users_flow)
     
     module_name = module_data['name']
     module_desc = ("\n" + module_data['description']) if module_data['description'] != '' else ''
@@ -1663,6 +1711,22 @@ async def my_chat_id(message: types.Message):
         f"Текущий chat_id: {message.chat.id}\n"
         f"Тип чата: {message.chat.type}"
     )
+
+
+@start_router.message(Command("sync"))
+async def sync_command(message: types.Message):
+    if message.from_user.id != 5201430878:
+        return
+
+    progress_msg = await message.answer("⏳ Запускаю синхронизацию таблиц...")
+
+    try:
+        await force_sync_sheets_now()
+        await progress_msg.edit_text(
+            f"✅ Синхронизация завершена. modules={len(config.SHEETS_DATA['modules'])}, lessons={len(config.SHEETS_DATA['lessons'])}, required_tasks={len(config.SHEETS_DATA['required_tasks'])}"
+        )
+    except Exception as e:
+        await progress_msg.edit_text(f"❌ Ошибка синхронизации: {e}")
 
 
 @start_router.message(Command("list"))
