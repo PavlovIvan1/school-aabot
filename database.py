@@ -2,6 +2,7 @@ import mysql.connector
 import config
 import json
 import time
+import re
 
 class MySQL:
 
@@ -429,6 +430,16 @@ class MySQL:
                 return True
             if flow_token == row_normalized:
                 return True
+
+            # Поддержка форматов ячейки: "15.8 15.9", "15.8/15.9", "15.8;15.9" и т.п.
+            row_parts = [p.strip() for p in re.split(r"[\s;/|]+", row_normalized) if p.strip()]
+            if flow_token in row_parts:
+                return True
+
+            # Допуск на суффиксы в ячейке, например: "15.8vip"
+            for part in row_parts:
+                if part.startswith(flow_token):
+                    return True
 
         return False
 
