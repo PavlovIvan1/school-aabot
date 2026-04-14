@@ -230,8 +230,16 @@ class MySQL:
         normalized_flow = flow_value.replace(",", ".")
         is_flow_15_8_or_15_9 = normalized_flow.startswith("15.8") or normalized_flow.startswith("15.9")
 
+        def lesson_exists_for_flow(lesson_id: int) -> bool:
+            lesson_id_str = str(lesson_id)
+            for lesson in config.SHEETS_DATA["lessons"]:
+                lesson_flows = [f.strip() for f in str(lesson.get("flow", "")).split(",") if f.strip()]
+                if lesson.get("lesson_id") == lesson_id_str and flow_value in lesson_flows:
+                    return True
+            return False
+
         def normalize_required_lesson_id(lesson_id: int) -> int:
-            if is_flow_15_8_or_15_9 and lesson_id == 7:
+            if is_flow_15_8_or_15_9 and lesson_id == 7 and lesson_exists_for_flow(15):
                 return 15
             return lesson_id
 
