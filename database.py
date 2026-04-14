@@ -227,8 +227,11 @@ class MySQL:
 
         # В потоке 15.8 и 15.9 заменяем старый урок (ID 7)
         # на новый блок «Блог и reels как система» (ID 15).
+        normalized_flow = flow_value.replace(",", ".")
+        is_flow_15_8_or_15_9 = normalized_flow.startswith("15.8") or normalized_flow.startswith("15.9")
+
         def normalize_required_lesson_id(lesson_id: int) -> int:
-            if flow_value in {"15.8", "15.9"} and lesson_id == 7:
+            if is_flow_15_8_or_15_9 and lesson_id == 7:
                 return 15
             return lesson_id
 
