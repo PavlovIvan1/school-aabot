@@ -206,17 +206,6 @@ class MySQL:
             lesson_flows = [f.strip() for f in str(i.get("flow", "")).split(",") if f.strip()]
             if i["module_id"] == module_id and self._flow_matches(flow_value, lesson_flows):
                 lessons.append(i)
-
-        # Fallback для модуля «Блог и reels как система»:
-        # если в выбранном ID (7/15) нет уроков для потока,
-        # пробуем альтернативный ID, чтобы модуль не был пустым.
-        if len(lessons) == 0:
-            alt_module_id = self._alt_blog_module_id(module_id)
-            if alt_module_id is not None:
-                for i in config.SHEETS_DATA["lessons"]:
-                    lesson_flows = [f.strip() for f in str(i.get("flow", "")).split(",") if f.strip()]
-                    if i["module_id"] == alt_module_id and self._flow_matches(flow_value, lesson_flows):
-                        lessons.append(i)
         
         return sorted(lessons, key=lambda x: int(x["lesson_id"]))
     
@@ -455,14 +444,6 @@ class MySQL:
         if (not self._is_new_blog_module_flow(flow)) and module_id_str == "15":
             return "7"
         return module_id_str
-
-    def _alt_blog_module_id(self, module_id):
-        module_id_str = str(module_id).strip()
-        if module_id_str == "15":
-            return "7"
-        if module_id_str == "7":
-            return "15"
-        return None
     
     def add_update_data(self, data):
         self.cursor.execute("INSERT INTO update_data (data) VALUES (%s)", (json.dumps(data),))
