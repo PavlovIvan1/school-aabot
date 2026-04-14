@@ -191,7 +191,7 @@ class MySQL:
         flow_value = str(flow).strip()
         for i in config.SHEETS_DATA["lessons"]:
             lesson_flows = [f.strip() for f in str(i.get("flow", "")).split(",") if f.strip()]
-            if i["lesson_id"] == lesson_id and flow_value in lesson_flows:
+            if i["lesson_id"] == lesson_id and self._flow_matches(flow_value, lesson_flows):
                 return i
              
         return None
@@ -199,10 +199,11 @@ class MySQL:
     def get_lessons(self, module_id, flow):
         lessons = []
         flow_value = str(flow).strip()
+        module_id = self._map_blog_module_id_for_flow(module_id, flow_value)
 
         for i in config.SHEETS_DATA["lessons"]:
             lesson_flows = [f.strip() for f in str(i.get("flow", "")).split(",") if f.strip()]
-            if i["module_id"] == module_id and flow_value in lesson_flows:
+            if i["module_id"] == module_id and self._flow_matches(flow_value, lesson_flows):
                 lessons.append(i)
         
         return sorted(lessons, key=lambda x: int(x["lesson_id"]))
@@ -211,41 +212,24 @@ class MySQL:
         flow_value = str(flow).strip()
         for i in config.SHEETS_DATA["lessons"]:
             lesson_flows = [f.strip() for f in str(i.get("flow", "")).split(",") if f.strip()]
-            if i["lesson_id"] == lesson_id and flow_value in lesson_flows:
+            if i["lesson_id"] == lesson_id and self._flow_matches(flow_value, lesson_flows):
                 return [self.get_module(i["module_id"], flow_value), i]
-    
+
     def get_module(self, module_id, flow):
         flow_value = str(flow).strip()
+        module_id = self._map_blog_module_id_for_flow(module_id, flow_value)
         for i in config.SHEETS_DATA["modules"]:
             module_flows = [f.strip() for f in str(i.get("flow", "")).split(",") if f.strip()]
-            if i["id"] == module_id and flow_value in module_flows:
+            if i["id"] == module_id and self._flow_matches(flow_value, module_flows):
                 return i
             
     def get_required_homework_ids(self, flow):
         flow_value = str(flow).strip()
         homework_ids: list[str] = []
 
-        # В потоке 15.8 и 15.9 заменяем старый урок (ID 7)
-        # на новый блок «Блог и reels как система» (ID 15).
-        normalized_flow = flow_value.replace(",", ".")
-        is_flow_15_8_or_15_9 = normalized_flow.startswith("15.8") or normalized_flow.startswith("15.9")
-
-        def lesson_exists_for_flow(lesson_id: int) -> bool:
-            lesson_id_str = str(lesson_id)
-            for lesson in config.SHEETS_DATA["lessons"]:
-                lesson_flows = [f.strip() for f in str(lesson.get("flow", "")).split(",") if f.strip()]
-                if lesson.get("lesson_id") == lesson_id_str and flow_value in lesson_flows:
-                    return True
-            return False
-
-        def normalize_required_lesson_id(lesson_id: int) -> int:
-            if is_flow_15_8_or_15_9 and lesson_id == 7 and lesson_exists_for_flow(15):
-                return 15
-            return lesson_id
-
         for i in config.SHEETS_DATA["required_tasks"]:
             row_flows = [f.strip() for f in str(i.get("flow", "")).split(",") if f.strip()]
-            if flow_value in row_flows:
+            if self._flow_matches(flow_value, row_flows):
                 lesson_ids_raw = str(i.get("lesson_ids", "")).strip()
                 if len(lesson_ids_raw) == 0:
                     continue
@@ -258,19 +242,16 @@ class MySQL:
                 analog_ids = []
                 for part in item.split("_"):
                     if part.isdigit():
-                        analog_ids.append(normalize_required_lesson_id(int(part)))
+                        analog_ids.append(int(part))
 
                 if len(analog_ids) == 0:
                     continue
-
-                # После замены ID возможны дубли (например, 7 и 15 -> 15 и 15)
-                analog_ids = list(dict.fromkeys(analog_ids))
 
                 for lesson_id in analog_ids:
                     homework_ids_2[lesson_id] = {"analog": analog_ids}
             else:
                 if item.isdigit():
-                    homework_ids_2[normalize_required_lesson_id(int(item))] = {}
+                    homework_ids_2[int(item)] = {}
 
         return homework_ids_2
             
@@ -386,8 +367,28 @@ class MySQL:
 
         for i in config.SHEETS_DATA["modules"]:
             module_flows = [f.strip() for f in str(i.get("flow", "")).split(",") if f.strip()]
-            if flow_value in module_flows:
+            if self._flow_matches(flow_value, module_flows):
                 modules.append(i)
+
+        # Для модуля «Блог и reels как система»:
+        # - потоки 15.8/15.9 -> показываем ID 15
+        # - остальные потоки -> показываем ID 7
+        use_new_blog_module = self._is_new_blog_module_flow(flow_value)
+        filtered_modules = []
+        for module in modules:
+            module_id = str(module.get("id", "")).strip()
+            module_name = str(module.get("name", "")).lower()
+            is_blog_reels_module = "блог" in module_name and ("reels" in module_name or "рилс" in module_name)
+
+            if is_blog_reels_module:
+                if use_new_blog_module and module_id == "7":
+                    continue
+                if (not use_new_blog_module) and module_id == "15":
+                    continue
+
+            filtered_modules.append(module)
+
+        modules = filtered_modules
         
         def custom_sort(m):
             mod_id = int(m["id"])
@@ -399,6 +400,39 @@ class MySQL:
                 return (2, mod_id)
         
         return sorted(modules, key=custom_sort)
+
+    def _flow_matches(self, flow_value, row_flows):
+        flow_raw = str(flow_value).strip()
+        flow_normalized = flow_raw.replace(",", ".")
+        flow_token = flow_normalized.split()[0] if len(flow_normalized.split()) > 0 else flow_normalized
+
+        for row_flow in row_flows:
+            row_raw = str(row_flow).strip()
+            if len(row_raw) == 0:
+                continue
+
+            row_normalized = row_raw.replace(",", ".")
+            if flow_raw == row_raw:
+                return True
+            if flow_normalized == row_normalized:
+                return True
+            if flow_token == row_normalized:
+                return True
+
+        return False
+
+    def _is_new_blog_module_flow(self, flow):
+        flow_value = str(flow).strip().replace(",", ".")
+        flow_token = flow_value.split()[0] if len(flow_value.split()) > 0 else flow_value
+        return flow_token.startswith("15.8") or flow_token.startswith("15.9")
+
+    def _map_blog_module_id_for_flow(self, module_id, flow):
+        module_id_str = str(module_id).strip()
+        if self._is_new_blog_module_flow(flow) and module_id_str == "7":
+            return "15"
+        if (not self._is_new_blog_module_flow(flow)) and module_id_str == "15":
+            return "7"
+        return module_id_str
     
     def add_update_data(self, data):
         self.cursor.execute("INSERT INTO update_data (data) VALUES (%s)", (json.dumps(data),))
