@@ -1562,13 +1562,30 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
         except Exception:
             pass
 
-    homework_name = (db.get_lesson(str(state_data["lesson_id"]), users_flow))["name"]
+    lesson_data = db.get_lesson(str(state_data["lesson_id"]), users_flow)
+    homework_name = lesson_data["name"] if lesson_data is not None else f"Урок {state_data['lesson_id']}"
 
     is_do_homework = db.get_homework_by_lesson_id(message.from_user.id, state_data["lesson_id"])
 
     update_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    msg_1 = await message.bot.send_message(SEND_CHAT_ID, f'⬇️ {message.from_user.full_name} @{message.from_user.username} ({user_data[0]["email"].lower()} Поток: {users_flow}) сделал ДЗ! Урок: {homework_name} (Техническая информация: {message.from_user.id}_{state_data["lesson_id"]}) ⬇️')
-    msg_2 = await message.bot.copy_message(SEND_CHAT_ID, message.chat.id, message.message_id)
+    try:
+        msg_1 = await message.bot.send_message(
+            SEND_CHAT_ID,
+            f'⬇️ {message.from_user.full_name} @{message.from_user.username} ({user_data[0]["email"].lower()} Поток: {users_flow}) сделал ДЗ! Урок: {homework_name} (Техническая информация: {message.from_user.id}_{state_data["lesson_id"]}) ⬇️'
+        )
+        msg_2 = await message.bot.copy_message(SEND_CHAT_ID, message.chat.id, message.message_id)
+    except Exception as e:
+        await message.answer("Не удалось отправить ДЗ трекеру. Попробуйте ещё раз через минуту или напишите в поддержку.")
+        try:
+            await message.bot.send_message(
+                config.LOG_CHAT_ID,
+                f"❌ Ошибка отправки ДЗ в чат трекера: user_id={message.from_user.id}, "
+                f"email={user_data[0]['email'].lower()}, flow={users_flow}, lesson_id={state_data['lesson_id']}, "
+                f"send_chat_id={SEND_CHAT_ID}, error={e}"
+            )
+        except Exception:
+            pass
+        return
 
     if len(is_do_homework) != 0:
         db.edit_homework(
