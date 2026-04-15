@@ -466,6 +466,30 @@ class MySQL:
         result = self.cursor.fetchall()
 
         return True if len(result) > 0 else False
+
+    def find_users_access_email(self, email: str):
+        """Ищет реальный mail в users_access по нормализованному email.
+
+        Нужно для кейсов, когда в таблице есть скрытые unicode-символы
+        (zero-width/BOM) или лишние пробелы.
+        """
+        normalized_email = re.sub(r"[\u200B-\u200D\uFEFF\s]+", "", (email or "").lower())
+        if not normalized_email:
+            return None
+
+        self.cursor.execute("SELECT mail FROM users_access")
+        rows = self.cursor.fetchall()
+
+        for row in rows:
+            raw_mail = row.get("mail")
+            if not raw_mail:
+                continue
+
+            normalized_mail = re.sub(r"[\u200B-\u200D\uFEFF\s]+", "", str(raw_mail).lower())
+            if normalized_mail == normalized_email:
+                return str(raw_mail)
+
+        return None
     
     def get_flow_by_email(self, email):
         self.cursor.execute("SELECT flow FROM users_access WHERE mail = %s", (email,))

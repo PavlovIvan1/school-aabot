@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import json
+import html
 import gspread_asyncio
 from google.oauth2.service_account import Credentials
 import time
@@ -432,7 +433,7 @@ async def handle_alice_request(request: Request):
             else:
                 message_date = "—"
 
-            safe_message_text = message.get("message_text") or ""
+            safe_message_text = html.escape(message.get("message_text") or "").replace("\n", "<br>")
             html_messages += f'<div class="message {message_from_type}" data-message-id="{message["message_id"]}">{safe_message_text}'
             
             try:
@@ -511,7 +512,7 @@ async def handle_alice_request(request: Request):
             else:
                 message_date = "—"
 
-            safe_message_text = message.get("message_text") or ""
+            safe_message_text = html.escape(message.get("message_text") or "").replace("\n", "<br>")
             html_messages += f'<div class="message {message_from_type}" data-message-id="{message["message_id"]}">{safe_message_text}'
 
             try:

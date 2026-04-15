@@ -41,6 +41,16 @@ BROADCAST_TASK = None
 HIDE_LEARNING_BUTTONS_FROM_FLOW = "15.10"
 
 
+def normalize_email(raw_email: str) -> str:
+    """Нормализует email от скрытых unicode-символов и лишних пробелов."""
+    email = (raw_email or "").lower()
+    # Удаляем zero-width символы и BOM, которые часто ломают точные SQL-сравнения.
+    email = re.sub(r"[\u200B-\u200D\uFEFF]", "", email)
+    # Удаляем все пробельные символы (включая неразрывные)
+    email = "".join(email.split())
+    return email
+
+
 def load_users_additional_info_from_file() -> None:
     try:
         with open("users_additional_info.json", "r", encoding="utf-8") as f:
@@ -997,18 +1007,26 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
         await message.answer("Пожалуйста, введите email текстовым сообщением", reply_markup=keyboard.main_keyboard(include_dashboards=is_staff))
         return
     
-    normalized_email = "".join((message.text or "").lower().split())
-    is_access = db.is_email_in_users_access(normalized_email)
+    normalized_email = normalize_email(message.text or "")
+    access_email = normalized_email
+    is_access = db.is_email_in_users_access(access_email)
+
+    # Фолбэк для "грязных" email в users_access (zero-width/BOM/скрытые пробелы).
+    if not is_access:
+        matched_email = db.find_users_access_email(normalized_email)
+        if matched_email:
+            access_email = matched_email
+            is_access = True
 
     if is_access:
-        db.add_user(message.from_user.id, normalized_email)
+        db.add_user(message.from_user.id, access_email)
         await state.clear()
         
-        users_flow = db.get_flow_by_email(normalized_email)
+        users_flow = db.get_flow_by_email(access_email)
         
         # Добавляем пользователя в Google Таблицу
         try:
-            await add_user_to_spreadsheet(message.from_user.id, normalized_email, users_flow, message.bot)
+            await add_user_to_spreadsheet(message.from_user.id, access_email, users_flow, message.bot)
         except Exception as e:
             print(f"Ошибка при добавлении в Google Таблицу: {e}")
 
@@ -1021,7 +1039,7 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
 Увидимся в рекомендациях!''', reply_markup=keyboard.main_keyboard(include_dashboards=is_staff, hide_learning_buttons=hide_learning_buttons))
         
         try:
-            await message.bot.send_message(config.LOG_CHAT_ID, f'Новый пользователь в боте: {message.from_user.full_name} @{message.from_user.username} (ID: {message.from_user.id})\nПочта: {normalized_email}')
+            await message.bot.send_message(config.LOG_CHAT_ID, f'Новый пользователь в боте: {message.from_user.full_name} @{message.from_user.username} (ID: {message.from_user.id})\nПочта: {access_email}')
         except:
             pass
     else:
