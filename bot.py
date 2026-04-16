@@ -2263,10 +2263,14 @@ async def check_info():
                 for idx, row in enumerate(table_2_data[1:], start=1):
                     if idx % 25 == 0:
                         await asyncio.sleep(0)
-                    if row[0] is None or row[1] is None or row[2] is None or len(row[0]) == 0 or len(row[1]) == 0 or not is_int(row[1]) or len(row[2]) == 0:
+                    if row[0] is None or row[2] is None or len(row[0]) == 0 or len(row[2]) == 0:
                         continue
 
-                    row_data = {'mail': clean_string(row[0].lower().strip()), 'chat_id': int(row[1]), 'flow': row[2]}
+                    chat_id_value = 0
+                    if len(row) > 1 and row[1] is not None and len(str(row[1]).strip()) != 0 and is_int(str(row[1]).strip()):
+                        chat_id_value = int(str(row[1]).strip())
+
+                    row_data = {'mail': clean_string(row[0].lower().strip()), 'chat_id': chat_id_value, 'flow': row[2]}
 
                     if len(row[3]) != 0: # Есть ли дата удаления
                         try:
