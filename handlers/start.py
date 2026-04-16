@@ -51,6 +51,45 @@ def normalize_email(raw_email: str) -> str:
     return email
 
 
+def extract_target_user_id_from_reply(reply_message: Message) -> Optional[int]:
+    """Пытается определить tg_id ученика из reply-сообщения.
+
+    Поддерживает:
+    1) служебный текст с "Техническая информация: <id>";
+    2) ответ на forwarded-сообщение ученика (без служебного заголовка).
+    """
+    if reply_message is None:
+        return None
+
+    try:
+        reply_text = (reply_message.text or reply_message.caption or "")
+        technical_match = re.search(r"Техническая информация:\s*([0-9_]+)", reply_text)
+        if technical_match is not None:
+            raw_value = technical_match.group(1).split("_")[0]
+            if raw_value.isdigit():
+                return int(raw_value)
+    except Exception:
+        pass
+
+    # Фолбэк: если трекер/психолог/поддержка отвечают прямо на forwarded сообщение ученика.
+    try:
+        forward_from = getattr(reply_message, "forward_from", None)
+        if forward_from is not None and getattr(forward_from, "id", None) is not None:
+            return int(forward_from.id)
+    except Exception:
+        pass
+
+    try:
+        forward_origin = getattr(reply_message, "forward_origin", None)
+        sender_user = getattr(forward_origin, "sender_user", None)
+        if sender_user is not None and getattr(sender_user, "id", None) is not None:
+            return int(sender_user.id)
+    except Exception:
+        pass
+
+    return None
+
+
 def load_users_additional_info_from_file() -> None:
     try:
         with open("users_additional_info.json", "r", encoding="utf-8") as f:
@@ -2115,8 +2154,10 @@ async def command_start_handler(message: Message) -> None:
         return
     
     # Обработка системы трекеров
-    if db.is_tracker(message.chat.id) and message.reply_to_message is not None and message.reply_to_message.text is not None and message.reply_to_message.text.__contains__('(Техническая информация:'):
-        user_id = int(message.reply_to_message.text.split("Техническая информация: ")[-1].split(")")[0])
+    if db.is_tracker(message.chat.id) and message.reply_to_message is not None:
+        user_id = extract_target_user_id_from_reply(message.reply_to_message)
+        if user_id is None:
+            return
         
         try:
             await message.bot.copy_message(
@@ -2171,8 +2212,10 @@ async def command_start_handler(message: Message) -> None:
         return
 
     # Обработка сообщений из чата с психологом
-    if message.chat.id == config.PSYHOLOGIST_CHAT_ID and message.reply_to_message is not None and message.reply_to_message.text is not None and message.reply_to_message.text.__contains__('(Техническая информация:'):
-        user_id = int(message.reply_to_message.text.split("Техническая информация: ")[-1].split(")")[0])
+    if message.chat.id == config.PSYHOLOGIST_CHAT_ID and message.reply_to_message is not None:
+        user_id = extract_target_user_id_from_reply(message.reply_to_message)
+        if user_id is None:
+            return
         
         try:
             await message.bot.copy_message(
@@ -2229,8 +2272,10 @@ async def command_start_handler(message: Message) -> None:
         await message.reply(str(message.reply_to_message.message_id))
         return
 
-    if message.chat.id in support_chat_ids and message.reply_to_message is not None and message.reply_to_message.text is not None and message.reply_to_message.text.__contains__('(Техническая информация:'):
-        user_id = int(message.reply_to_message.text.split("Техническая информация: ")[-1].split(")")[0])
+    if message.chat.id in support_chat_ids and message.reply_to_message is not None:
+        user_id = extract_target_user_id_from_reply(message.reply_to_message)
+        if user_id is None:
+            return
         
         try:
             await message.bot.copy_message(

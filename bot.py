@@ -2153,8 +2153,12 @@ def start_web_process_managed():
     atexit.register(_stop_web_process)
 
 
-def clean_string(string) -> tuple[str, bool]:
-    cleaned_string = ' '.join(string.split())
+def clean_string(string) -> str:
+    # Нормализация строк (в первую очередь email) от скрытых unicode-символов
+    # и любых пробельных символов, которые ломают точные совпадения ключей.
+    cleaned_string = str(string or "").lower()
+    cleaned_string = re.sub(r"[\u200B-\u200D\uFEFF]", "", cleaned_string)
+    cleaned_string = "".join(cleaned_string.split())
     return cleaned_string
 
 async def check_info():
