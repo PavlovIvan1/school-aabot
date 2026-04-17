@@ -824,7 +824,7 @@ async def command_start_handler(call: CallbackQuery) -> None:
         count_claps = 11
         claps_path = "files/15_6/"
     elif float(users_flow) >= 15.8 and float(users_flow) < 16:
-        count_claps = 8
+        count_claps = 10
         claps_path = "files/15_8/"
 
     if count_required_homework == 0:
@@ -1747,9 +1747,9 @@ async def send_congratulation_message(message: Message, lesson_id: int, user_id)
         await asyncio.sleep(0.5)
         await message.bot.send_document(user_id, FSInputFile(f'files/Тренды в контенте 2026.pdf'))
 
-    elif count_required_homework >= 8 and float(users_flow) >= 15.8 and float(users_flow) < 16:
+    elif count_required_homework >= 10 and float(users_flow) >= 15.8 and float(users_flow) < 16:
         lesson_data = db.get_lesson(str(lesson_id), users_flow)
-        await message.bot.send_photo(user_id, photo=FSInputFile(f'files/15_8/{count_required_homework}.jpg'), caption="""Поздравляем!🎉 Тобой сданы все 8 обязательных заданий!🎬 Ты молодец😍
+        await message.bot.send_photo(user_id, photo=FSInputFile(f'files/15_8/{count_required_homework}.jpg'), caption="""Поздравляем!🎉 Тобой сданы все 10 обязательных заданий!🎬 Ты молодец😍
 
 Забирай свой бонус - «Тренды в контенте в 2026 году»""", parse_mode="HTML")
         await asyncio.sleep(0.5)
