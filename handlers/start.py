@@ -1856,7 +1856,10 @@ async def tracker_list_command(message: types.Message):
     if message.chat.type not in ('group', 'supergroup'):
         return
 
+    # Подтягиваем локальные кэши, которые пишет sync_worker/bot,
+    # чтобы /list не зависел от "живого" обновления в памяти процесса.
     load_users_additional_info_from_file()
+    load_sheets_data_from_file()
 
     chat_id = message.chat.id
     users_from_config = db.get_users_by_tracker_chat_id(chat_id)
@@ -1870,7 +1873,15 @@ async def tracker_list_command(message: types.Message):
         if email
     ]))
 
-    if db.is_tracker(chat_id) or len(users_list) != 0:
+    is_tracker_chat = db.is_tracker(chat_id)
+
+    # Фолбэк: если по текущему кэшу чат не определился как трекерский,
+    # пробуем ещё раз перечитать кэш из файла (на случай гонки обновления).
+    if not is_tracker_chat:
+        load_sheets_data_from_file()
+        is_tracker_chat = db.is_tracker(chat_id)
+
+    if is_tracker_chat or len(users_list) != 0:
         await message.reply("Список учеников трекера:", reply_markup=keyboard.web_app_tracker_list_keyboard(chat_id))
         return
 
