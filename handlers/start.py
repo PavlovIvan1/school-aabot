@@ -487,6 +487,19 @@ def should_hide_learning_buttons(flow_value: Any) -> bool:
     return parsed >= threshold
 
 
+def is_homework_disabled_for_user(tg_id: int) -> bool:
+    """Проверяет, отключён ли homework-раздел для пользователя по его потоку."""
+    try:
+        user_data = db.get_user(tg_id)
+        if len(user_data) == 0:
+            return False
+
+        flow_value = db.get_flow_by_email(user_data[0]['email'])
+        return should_hide_learning_buttons(flow_value)
+    except Exception:
+        return False
+
+
 async def run_students_broadcast(bot, initiator_user_id: int, text: str):
     global BROADCAST_TASK
 
@@ -796,11 +809,20 @@ async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
 @start_router.callback_query(F.data == 'study_menu')
 async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
+
+    if is_homework_disabled_for_user(call.from_user.id):
+        await call.answer('Для вашего потока раздел домашних заданий недоступен', show_alert=True)
+        return
+
     await edit_message(call.message, 'Выберите действие из меню ниже:', reply_markup=keyboard.study_keyboard())
 
 
 @start_router.callback_query(F.data == 'get_instruction')
 async def command_start_handler(call: CallbackQuery) -> None:
+    if is_homework_disabled_for_user(call.from_user.id):
+        await call.answer('Для вашего потока инструкция по ДЗ недоступна', show_alert=True)
+        return
+
     try:
         await call.message.delete()
     except:
@@ -811,11 +833,19 @@ async def command_start_handler(call: CallbackQuery) -> None:
 
 @start_router.callback_query(F.data == 'get_homeworks')
 async def command_start_handler(call: CallbackQuery) -> None:
+    if is_homework_disabled_for_user(call.from_user.id):
+        await call.answer('Для вашего потока информация о ДЗ недоступна', show_alert=True)
+        return
+
     await edit_message(call.message, 'Выбери тип домашнего задания', reply_markup=keyboard.get_homeworks_keyboard())
 
 
 @start_router.callback_query(F.data == 'my_claps')
 async def command_start_handler(call: CallbackQuery) -> None:
+    if is_homework_disabled_for_user(call.from_user.id):
+        await call.answer('Для вашего потока раздел хлопушек недоступен', show_alert=True)
+        return
+
     user_data = db.get_user(call.from_user.id)
     users_flow = db.get_flow_by_email(user_data[0]['email'])
 
@@ -878,6 +908,10 @@ async def command_start_handler(call: CallbackQuery) -> None:
 
 @start_router.callback_query(F.data.startswith('get_homeworks:'))
 async def command_start_handler(call: CallbackQuery) -> None:
+    if is_homework_disabled_for_user(call.from_user.id):
+        await call.answer('Для вашего потока информация о ДЗ недоступна', show_alert=True)
+        return
+
     homework_type = call.data.split(':')[1]
     print(homework_type)
 
@@ -1100,6 +1134,29 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
             flow_from_link = link_rows[-1].get("flow")
             access_flow = str(flow_from_link).strip() if flow_from_link is not None else None
 
+    # Фолбэк: пользователь может быть уже в users_additional_info.json
+    # (лист users), но ещё отсутствовать в users_access в моменте.
+    if not is_access:
+        load_users_additional_info_from_file()
+
+        matched_additional_email = None
+        if normalized_email in config.USERS_ADDITIONAL_INFO:
+            matched_additional_email = normalized_email
+        else:
+            for raw_email in config.USERS_ADDITIONAL_INFO.keys():
+                if normalize_email(raw_email) == normalized_email:
+                    matched_additional_email = raw_email
+                    break
+
+        if matched_additional_email is not None:
+            is_access = True
+            access_email = normalize_email(matched_additional_email)
+
+    # Дополнительный фолбэк: email мог быть отмечен в added_api_users.
+    if not is_access and db.is_email_in_added_api_users(normalized_email):
+        is_access = True
+        access_email = normalized_email
+
     if is_access:
         ensure_user_binding(message.from_user.id, access_email)
         await state.clear()
@@ -1122,8 +1179,14 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
         if float(users_flow) >= 14.3 and not hide_learning_buttons:
             await message.answer_document(FSInputFile('files/Инструкция по чат боту.pdf'))
 
-        await message.answer('''Проверка твоего аккаунта прошла успешно, ты можешь приступить к выполнению домашних заданий.
-Увидимся в рекомендациях!''', reply_markup=keyboard.main_keyboard(include_dashboards=is_staff, hide_learning_buttons=hide_learning_buttons))
+        if hide_learning_buttons:
+            success_text = '''Проверка твоего аккаунта прошла успешно.
+Ты можешь пользоваться разделами общения с командой и поддержкой.'''
+        else:
+            success_text = '''Проверка твоего аккаунта прошла успешно, ты можешь приступить к выполнению домашних заданий.
+Увидимся в рекомендациях!'''
+
+        await message.answer(success_text, reply_markup=keyboard.main_keyboard(include_dashboards=is_staff, hide_learning_buttons=hide_learning_buttons))
         
         try:
             await message.bot.send_message(config.LOG_CHAT_ID, f'Новый пользователь в боте: {message.from_user.full_name} @{message.from_user.username} (ID: {message.from_user.id})\nПочта: {access_email}')
@@ -1203,6 +1266,10 @@ https://t.me/addlist/de2kQMGg21piOThi
 
 @start_router.callback_query(F.data == 'get_modules')
 async def command_start_handler(call: CallbackQuery) -> None:
+    if is_homework_disabled_for_user(call.from_user.id):
+        await call.answer('Для вашего потока раздел домашних заданий недоступен', show_alert=True)
+        return
+
     user_data = db.get_user(call.from_user.id)
     users_flow = db.get_flow_by_email(user_data[0]['email'])
 
@@ -1214,6 +1281,10 @@ async def command_start_handler(call: CallbackQuery) -> None:
 @start_router.callback_query(F.data.startswith('get_module:'))
 async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
+
+    if is_homework_disabled_for_user(call.from_user.id):
+        await call.answer('Для вашего потока раздел домашних заданий недоступен', show_alert=True)
+        return
 
     module_id = call.data.split(':')[1]
     user_data = db.get_user(call.from_user.id)
@@ -1268,6 +1339,10 @@ async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
 
 @start_router.callback_query(F.data.startswith('get_lesson:'))
 async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
+    if is_homework_disabled_for_user(call.from_user.id):
+        await call.answer('Для вашего потока раздел домашних заданий недоступен', show_alert=True)
+        return
+
     lesson_id = call.data.split(':')[1]
 
     homework_data = db.get_homework_by_lesson_id(call.from_user.id, lesson_id)
@@ -1541,6 +1616,11 @@ async def command_start_handler(call: CallbackQuery) -> None:
 
 @start_router.message(SendHomeWork.homework)
 async def command_start_handler(message: Message, state: FSMContext) -> None:
+    if is_homework_disabled_for_user(message.from_user.id):
+        await state.clear()
+        await message.answer('Для вашего потока отправка домашних заданий недоступна.')
+        return
+
     state_data = await state.get_data()
     
     # Check if lesson_id exists in state data
