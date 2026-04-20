@@ -51,6 +51,28 @@ def normalize_email(raw_email: str) -> str:
     return email
 
 
+def ensure_user_binding(tg_id: int, access_email: str) -> None:
+    """Гарантирует связь tg_id <-> email в users без падений на дублях."""
+    normalized_access_email = normalize_email(access_email)
+    existing_rows = db.get_user_by_email(access_email)
+
+    if len(existing_rows) == 0 and normalized_access_email != access_email:
+        existing_rows = db.get_user_by_email(normalized_access_email)
+
+    try:
+        if len(existing_rows) == 0:
+            db.add_user(tg_id, normalized_access_email)
+        else:
+            email_to_update = existing_rows[0].get("email") or normalized_access_email
+            db.update_user_tg_id(email_to_update, tg_id)
+    except Exception:
+        # Последний фолбэк: пробуем обновить по нормализованной почте.
+        try:
+            db.update_user_tg_id(normalized_access_email, tg_id)
+        except Exception:
+            pass
+
+
 def extract_target_user_id_from_reply(reply_message: Message) -> Optional[int]:
     """Пытается определить tg_id ученика из reply-сообщения.
 
@@ -650,7 +672,7 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
             except:
                 pass
 
-            db.add_user(message.from_user.id, link_access_data[0]['email'])
+            ensure_user_binding(message.from_user.id, link_access_data[0]['email'])
             # Добавляем пользователя в Google Таблицу
             try:
                 await add_user_to_spreadsheet(message.from_user.id, link_access_data[0]['email'], db.get_flow_by_email(link_access_data[0]['email']), message.bot)
@@ -1048,7 +1070,14 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
     
     normalized_email = normalize_email(message.text or "")
     access_email = normalized_email
+    access_flow = None
     is_access = db.is_email_in_users_access(access_email)
+
+    if is_access:
+        try:
+            access_flow = db.get_flow_by_email(access_email)
+        except Exception:
+            access_flow = None
 
     # Фолбэк для "грязных" email в users_access (zero-width/BOM/скрытые пробелы).
     if not is_access:
@@ -1056,12 +1085,31 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
         if matched_email:
             access_email = matched_email
             is_access = True
+            try:
+                access_flow = db.get_flow_by_email(access_email)
+            except Exception:
+                access_flow = None
+
+    # Фолбэк: часть учеников может быть уже добавлена в link_access,
+    # но ещё не успеть появиться в users_access (рассинхрон/задержка синка).
+    if not is_access:
+        link_rows = db.get_link_access_by_email(normalized_email)
+        if len(link_rows) != 0:
+            is_access = True
+            access_email = normalized_email
+            flow_from_link = link_rows[-1].get("flow")
+            access_flow = str(flow_from_link).strip() if flow_from_link is not None else None
 
     if is_access:
-        db.add_user(message.from_user.id, access_email)
+        ensure_user_binding(message.from_user.id, access_email)
         await state.clear()
-        
-        users_flow = db.get_flow_by_email(access_email)
+
+        users_flow = str(access_flow).strip() if access_flow is not None else None
+        if not users_flow:
+            try:
+                users_flow = db.get_flow_by_email(access_email)
+            except Exception:
+                users_flow = "0"
         
         # Добавляем пользователя в Google Таблицу
         try:
