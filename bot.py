@@ -2204,18 +2204,24 @@ async def check_info():
                 continue
 
             email_raw = row[0]
-            flow_raw = row[2]
-            tracker_chat_raw = row[4]
+            flow_raw = row[2] if len(row) > 2 else ""
+            tracker_chat_raw = row[4] if len(row) > 4 else ""
             homework_chat_raw = row[1] if len(row) > 1 else ""
             tariff_raw = row[5] if len(row) > 5 else ""
 
-            if email_raw is None or flow_raw is None:
+            if email_raw is None:
                 continue
 
-            if len(str(email_raw).strip()) == 0 or len(str(flow_raw).strip()) == 0:
+            if len(str(email_raw).strip()) == 0:
                 continue
 
-            if tracker_chat_raw is None or len(str(tracker_chat_raw).strip()) == 0 or not is_int(str(tracker_chat_raw).strip()):
+            # Приоритет: communication chat из колонки tracker_chat (row[4]).
+            # Фолбэк: если он пустой/битый, берём row[1] (исторические таблицы).
+            tracker_chat_candidate = tracker_chat_raw
+            if tracker_chat_candidate is None or len(str(tracker_chat_candidate).strip()) == 0 or not is_int(str(tracker_chat_candidate).strip()):
+                tracker_chat_candidate = homework_chat_raw
+
+            if tracker_chat_candidate is None or len(str(tracker_chat_candidate).strip()) == 0 or not is_int(str(tracker_chat_candidate).strip()):
                 continue
 
             homework_chat_value = ""
@@ -2225,7 +2231,7 @@ async def check_info():
             email_key = clean_string(str(email_raw).lower().strip())
             config.USERS_ADDITIONAL_INFO[email_key] = {
                 "homework_chat_id": homework_chat_value,
-                "tracker_chat_id": str(tracker_chat_raw).strip(),
+                "tracker_chat_id": str(tracker_chat_candidate).strip(),
                 "tariff": "" if tariff_raw is None else str(tariff_raw).strip(),
             }
         dump_users_additional_info()
@@ -2450,18 +2456,22 @@ async def check_info():
                             continue
 
                         email_raw = row[0]
-                        flow_raw = row[2]
-                        tracker_chat_raw = row[4]
+                        flow_raw = row[2] if len(row) > 2 else ""
+                        tracker_chat_raw = row[4] if len(row) > 4 else ""
                         homework_chat_raw = row[1] if len(row) > 1 else ""
                         tariff_raw = row[5] if len(row) > 5 else ""
 
-                        if email_raw is None or flow_raw is None:
+                        if email_raw is None:
                             continue
 
-                        if len(str(email_raw).strip()) == 0 or len(str(flow_raw).strip()) == 0:
+                        if len(str(email_raw).strip()) == 0:
                             continue
 
-                        if tracker_chat_raw is None or len(str(tracker_chat_raw).strip()) == 0 or not is_int(str(tracker_chat_raw).strip()):
+                        tracker_chat_candidate = tracker_chat_raw
+                        if tracker_chat_candidate is None or len(str(tracker_chat_candidate).strip()) == 0 or not is_int(str(tracker_chat_candidate).strip()):
+                            tracker_chat_candidate = homework_chat_raw
+
+                        if tracker_chat_candidate is None or len(str(tracker_chat_candidate).strip()) == 0 or not is_int(str(tracker_chat_candidate).strip()):
                             continue
 
                         homework_chat_value = ""
@@ -2471,7 +2481,7 @@ async def check_info():
                         email_key = clean_string(str(email_raw).lower().strip())
                         row_info = {
                             "homework_chat_id": homework_chat_value,
-                            "tracker_chat_id": str(tracker_chat_raw).strip(),
+                            "tracker_chat_id": str(tracker_chat_candidate).strip(),
                             "tariff": "" if tariff_raw is None else str(tariff_raw).strip(),
                         }
 
