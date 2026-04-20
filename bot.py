@@ -876,6 +876,11 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
 
 @app.get("/get_tracker_chats_list")
 async def handle_alice_request(request: Request):
+    # Обновляем кэши перед сборкой списка, чтобы видеть актуальные привязки
+    # из users_additional_info.json/config.json, которые пишет sync-процесс.
+    load_users_additional_info()
+    load_sheets_data_from_file()
+
     chat_id = int(str(request.url).split("chat_id=")[-1].split("&")[0].replace("%40", "@")) # TODO привести в нормальный вид
 
     db_users_from_config = db.get_users_by_tracker_chat_id(chat_id)
@@ -883,7 +888,7 @@ async def handle_alice_request(request: Request):
     db_users_from_homework = db.get_users_emails_by_homework_chat_id(chat_id)
     db_users_from_messages = db.get_users_emails_by_tracker_messages_chat_id(chat_id)
     db_users_list = list(dict.fromkeys([
-        str(email).lower().strip()
+        clean_string(str(email))
         for email in (db_users_from_config + db_users_from_access + db_users_from_homework + db_users_from_messages)
         if email
     ]))
