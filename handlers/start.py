@@ -1124,13 +1124,31 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
             except Exception:
                 access_flow = None
 
+    # Страховка от ложного допуска: наличие email только в users НЕ даёт доступ.
+    # users может содержать устаревшие записи; подтверждаем только через
+    # users_access/link_access/users_additional_info.
+    if not is_access:
+        matched_user_email = db.find_user_email(normalized_email)
+        if matched_user_email:
+            load_users_additional_info_from_file()
+            normalized_user_email = normalize_email(matched_user_email)
+
+            if normalized_user_email in config.USERS_ADDITIONAL_INFO:
+                is_access = True
+                access_email = matched_user_email
+                try:
+                    access_flow = db.get_flow_by_email(access_email)
+                except Exception:
+                    access_flow = None
+
     # Фолбэк: часть учеников может быть уже добавлена в link_access,
     # но ещё не успеть появиться в users_access (рассинхрон/задержка синка).
     if not is_access:
-        link_rows = db.get_link_access_by_email(normalized_email)
+        matched_link_email = db.find_link_access_email(normalized_email)
+        link_rows = db.get_link_access_by_email(matched_link_email or normalized_email)
         if len(link_rows) != 0:
             is_access = True
-            access_email = normalized_email
+            access_email = matched_link_email or normalized_email
             flow_from_link = link_rows[-1].get("flow")
             access_flow = str(flow_from_link).strip() if flow_from_link is not None else None
 
@@ -1961,15 +1979,10 @@ async def tracker_list_command(message: types.Message):
         load_sheets_data_from_file()
         is_tracker_chat = db.is_tracker(chat_id)
 
-    if is_tracker_chat or len(users_list) != 0:
-        await message.reply("Список учеников трекера:", reply_markup=keyboard.web_app_tracker_list_keyboard(chat_id))
-        return
-
-    await message.reply(
-        "Команда /list недоступна в этом чате: чат не привязан к трекеру.\n"
-        f"Текущий chat_id: {chat_id}\n"
-        "Добавьте этот chat_id в лист tracker_ids и/или назначьте ученикам этот чат в таблице users."
-    )
+    # Аварийный режим: не блокируем /list в группах, чтобы трекер всегда мог
+    # открыть мини-апп и увидеть хотя бы диагностический/частичный список.
+    await message.reply("Список учеников трекера:", reply_markup=keyboard.web_app_tracker_list_keyboard(chat_id))
+    return
 
 
 @start_router.message(F.text.startswith('/flapper'))

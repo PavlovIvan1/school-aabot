@@ -6,6 +6,10 @@ import re
 
 class MySQL:
 
+    @staticmethod
+    def _normalize_email_value(email: str) -> str:
+        return re.sub(r"[\u200B-\u200D\uFEFF\s]+", "", (email or "").lower())
+
     def __init__(self):
         self.database = mysql.connector.connect(
             user=config.DATABASE_USER,
@@ -154,6 +158,25 @@ class MySQL:
     def get_user_by_email(self, email):
         self.cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
         return self.cursor.fetchall()
+
+    def find_user_email(self, email: str):
+        """Ищет реальный email в users по нормализованному значению."""
+        normalized_email = self._normalize_email_value(email)
+        if not normalized_email:
+            return None
+
+        self.cursor.execute("SELECT email FROM users")
+        rows = self.cursor.fetchall()
+
+        for row in rows:
+            raw_email = row.get("email")
+            if not raw_email:
+                continue
+
+            if self._normalize_email_value(str(raw_email)) == normalized_email:
+                return str(raw_email)
+
+        return None
     
     def get_user_by_email_with_valid_tg_id(self, email):
         """Получает пользователя по email с ненулевым tg_id"""
@@ -473,7 +496,7 @@ class MySQL:
         Нужно для кейсов, когда в таблице есть скрытые unicode-символы
         (zero-width/BOM) или лишние пробелы.
         """
-        normalized_email = re.sub(r"[\u200B-\u200D\uFEFF\s]+", "", (email or "").lower())
+        normalized_email = self._normalize_email_value(email)
         if not normalized_email:
             return None
 
@@ -485,9 +508,28 @@ class MySQL:
             if not raw_mail:
                 continue
 
-            normalized_mail = re.sub(r"[\u200B-\u200D\uFEFF\s]+", "", str(raw_mail).lower())
+            normalized_mail = self._normalize_email_value(str(raw_mail))
             if normalized_mail == normalized_email:
                 return str(raw_mail)
+
+        return None
+
+    def find_link_access_email(self, email: str):
+        """Ищет реальный email в link_access по нормализованному значению."""
+        normalized_email = self._normalize_email_value(email)
+        if not normalized_email:
+            return None
+
+        self.cursor.execute("SELECT email FROM link_access")
+        rows = self.cursor.fetchall()
+
+        for row in rows:
+            raw_email = row.get("email")
+            if not raw_email:
+                continue
+
+            if self._normalize_email_value(str(raw_email)) == normalized_email:
+                return str(raw_email)
 
         return None
     

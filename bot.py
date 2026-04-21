@@ -887,11 +887,23 @@ async def handle_alice_request(request: Request):
     db_users_from_access = db.get_users_access_emails_by_chat_id(chat_id)
     db_users_from_homework = db.get_users_emails_by_homework_chat_id(chat_id)
     db_users_from_messages = db.get_users_emails_by_tracker_messages_chat_id(chat_id)
-    db_users_list = list(dict.fromkeys([
-        clean_string(str(email))
-        for email in (db_users_from_config + db_users_from_access + db_users_from_homework + db_users_from_messages)
-        if email
-    ]))
+    # Важно: для поиска пользователя в БД используем "сырой" email (как в источнике),
+    # а нормализацию применяем только для дедупликации ключа.
+    # Иначе при скрытых символах в БД можно потерять совпадение и получить пустой список.
+    dedup_emails = {}
+    for email in (db_users_from_config + db_users_from_access + db_users_from_homework + db_users_from_messages):
+        if not email:
+            continue
+
+        raw_email = str(email).strip()
+        normalized_key = clean_string(raw_email)
+        if len(normalized_key) == 0:
+            continue
+
+        if normalized_key not in dedup_emails:
+            dedup_emails[normalized_key] = raw_email
+
+    db_users_list = list(dedup_emails.values())
     html_messages = ''
 
     for db_user in db_users_list:
@@ -2200,7 +2212,9 @@ async def check_info():
         table_2_data = await table_2.get_all_values()
 
         for row in table_2_data[1:]:
-            if len(row) < 5:
+            # Поддерживаем разные версии структуры листа users:
+            # минимум нужен только email + хотя бы одна колонка chat_id.
+            if len(row) < 2:
                 continue
 
             email_raw = row[0]
@@ -2452,7 +2466,7 @@ async def check_info():
                         if idx % 25 == 0:
                             await asyncio.sleep(0)
 
-                        if len(row) < 5:
+                        if len(row) < 2:
                             continue
 
                         email_raw = row[0]
