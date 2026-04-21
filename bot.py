@@ -105,6 +105,31 @@ def is_int(string):
     except ValueError:
         return False
 
+
+def parse_chat_id_value(raw_value):
+    """Нормализует chat_id из Google Sheets.
+
+    Поддерживает форматы:
+    - -1003916575707
+    - -1003916575707.0
+    - ' -1003916575707 '
+    """
+    if raw_value is None:
+        return None
+
+    value = str(raw_value).strip().replace(" ", "")
+    if len(value) == 0:
+        return None
+
+    # Иногда Google отдаёт числовые id как float-строки с .0
+    if value.endswith(".0"):
+        value = value[:-2]
+
+    if is_int(value):
+        return str(int(value))
+
+    return None
+
 app = FastAPI()
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -2231,21 +2256,19 @@ async def check_info():
 
             # Приоритет: communication chat из колонки tracker_chat (row[4]).
             # Фолбэк: если он пустой/битый, берём row[1] (исторические таблицы).
-            tracker_chat_candidate = tracker_chat_raw
-            if tracker_chat_candidate is None or len(str(tracker_chat_candidate).strip()) == 0 or not is_int(str(tracker_chat_candidate).strip()):
-                tracker_chat_candidate = homework_chat_raw
+            tracker_chat_candidate = parse_chat_id_value(tracker_chat_raw)
+            if tracker_chat_candidate is None:
+                tracker_chat_candidate = parse_chat_id_value(homework_chat_raw)
 
-            if tracker_chat_candidate is None or len(str(tracker_chat_candidate).strip()) == 0 or not is_int(str(tracker_chat_candidate).strip()):
+            if tracker_chat_candidate is None:
                 continue
 
-            homework_chat_value = ""
-            if homework_chat_raw is not None and len(str(homework_chat_raw).strip()) != 0 and is_int(str(homework_chat_raw).strip()):
-                homework_chat_value = str(homework_chat_raw).strip()
+            homework_chat_value = parse_chat_id_value(homework_chat_raw) or ""
 
             email_key = clean_string(str(email_raw).lower().strip())
             config.USERS_ADDITIONAL_INFO[email_key] = {
                 "homework_chat_id": homework_chat_value,
-                "tracker_chat_id": str(tracker_chat_candidate).strip(),
+                "tracker_chat_id": tracker_chat_candidate,
                 "tariff": "" if tariff_raw is None else str(tariff_raw).strip(),
             }
         dump_users_additional_info()
@@ -2292,8 +2315,9 @@ async def check_info():
                         continue
 
                     chat_id_value = 0
-                    if len(row) > 1 and row[1] is not None and len(str(row[1]).strip()) != 0 and is_int(str(row[1]).strip()):
-                        chat_id_value = int(str(row[1]).strip())
+                    parsed_chat_id = parse_chat_id_value(row[1] if len(row) > 1 else None)
+                    if parsed_chat_id is not None:
+                        chat_id_value = int(parsed_chat_id)
 
                     row_data = {'mail': clean_string(row[0].lower().strip()), 'chat_id': chat_id_value, 'flow': row[2]}
 
@@ -2481,21 +2505,19 @@ async def check_info():
                         if len(str(email_raw).strip()) == 0:
                             continue
 
-                        tracker_chat_candidate = tracker_chat_raw
-                        if tracker_chat_candidate is None or len(str(tracker_chat_candidate).strip()) == 0 or not is_int(str(tracker_chat_candidate).strip()):
-                            tracker_chat_candidate = homework_chat_raw
+                        tracker_chat_candidate = parse_chat_id_value(tracker_chat_raw)
+                        if tracker_chat_candidate is None:
+                            tracker_chat_candidate = parse_chat_id_value(homework_chat_raw)
 
-                        if tracker_chat_candidate is None or len(str(tracker_chat_candidate).strip()) == 0 or not is_int(str(tracker_chat_candidate).strip()):
+                        if tracker_chat_candidate is None:
                             continue
 
-                        homework_chat_value = ""
-                        if homework_chat_raw is not None and len(str(homework_chat_raw).strip()) != 0 and is_int(str(homework_chat_raw).strip()):
-                            homework_chat_value = str(homework_chat_raw).strip()
+                        homework_chat_value = parse_chat_id_value(homework_chat_raw) or ""
 
                         email_key = clean_string(str(email_raw).lower().strip())
                         row_info = {
                             "homework_chat_id": homework_chat_value,
-                            "tracker_chat_id": str(tracker_chat_candidate).strip(),
+                            "tracker_chat_id": tracker_chat_candidate,
                             "tariff": "" if tariff_raw is None else str(tariff_raw).strip(),
                         }
 
