@@ -2,6 +2,7 @@ import asyncio
 import logging
 import json
 import html
+import re
 import gspread_asyncio
 from google.oauth2.service_account import Credentials
 import time
