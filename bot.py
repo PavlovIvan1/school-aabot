@@ -237,13 +237,23 @@ app.add_middleware(
 
 @app.post("/add_data")
 async def handle_alice_request(request: Request):
-    email = request.query_params.get("email", "")
-    flow = request.query_params.get("flow", "")
-    user_id = request.query_params.get("user_id", "")
-    tarif = request.query_params.get("tarif", "")
-    
+    email = (request.query_params.get("email", "") or "").strip()
+    flow = (request.query_params.get("flow", "") or "").strip()
+    user_id = (request.query_params.get("user_id", "") or "").strip()
+    tarif = (request.query_params.get("tarif", "") or "").strip()
+
+    # Внешние интеграции иногда присылают неполный query string.
+    # Раньше здесь бросался ValueError -> 500 в web-логах.
+    # Возвращаем контролируемый ответ без исключения.
     if not email or not flow or not user_id:
-        raise ValueError("Missing required parameters")
+        return JSONResponse(
+            content={
+                "success": False,
+                "error": "Missing required parameters",
+                "required": ["email", "flow", "user_id"],
+            },
+            status_code=400,
+        )
 
     is_email_in_users_access = db.is_email_in_users_access(email)
     is_email_in_added_api_users = db.is_email_in_added_api_users(email)
