@@ -22,6 +22,7 @@ import os
 from typing import Dict, Any
 import aiofiles
 import traceback
+from typing import Optional, Tuple
 from handlers.start import start_router
 from handlers.support import support_router
 from handlers.tracker import tracker_router
@@ -78,6 +79,98 @@ def load_sheets_data_from_file() -> None:
                 config.SHEETS_DATA = data
     except Exception:
         pass
+
+
+def parse_sheet_date_to_ts(raw_value) -> int:
+    """Преобразует дату из Google Sheets в unix timestamp для приоритизации записей."""
+    if raw_value is None:
+        return 0
+
+    value = str(raw_value).strip()
+    if len(value) == 0:
+        return 0
+
+    for fmt in ("%d.%m.%Y", "%d.%m.%y"):
+        try:
+            return int(datetime.datetime.strptime(value, fmt).timestamp())
+        except Exception:
+            continue
+
+    return 0
+
+
+def build_users_additional_info(rows) -> Dict[str, Dict[str, Any]]:
+    """Собирает users additional info из строк листа users с защитой от дублей.
+
+    При конфликте по одному email выбирается запись с максимальным приоритетом:
+    1) заполнен tracker_chat_id в явной колонке row[4]
+    2) более свежая дата потока row[3]
+    3) более поздняя строка в таблице
+    """
+    result: Dict[str, Dict[str, Any]] = {}
+    priorities: Dict[str, Tuple[int, int, int]] = {}
+
+    for idx, row in enumerate(rows, start=1):
+        if len(row) < 2:
+            continue
+
+        email_raw = row[0]
+        tracker_chat_raw = row[4] if len(row) > 4 else ""
+        homework_chat_raw = row[1] if len(row) > 1 else ""
+        tariff_raw = row[5] if len(row) > 5 else ""
+        flow_date_raw = row[3] if len(row) > 3 else ""
+
+        if email_raw is None or len(str(email_raw).strip()) == 0:
+            continue
+
+        tracker_chat_explicit = parse_chat_id_value(tracker_chat_raw)
+        tracker_chat_candidate = tracker_chat_explicit
+        if tracker_chat_candidate is None:
+            tracker_chat_candidate = parse_chat_id_value(homework_chat_raw)
+
+        if tracker_chat_candidate is None:
+            continue
+
+        homework_chat_value = parse_chat_id_value(homework_chat_raw) or ""
+        email_key = clean_string(str(email_raw).lower().strip())
+        if len(email_key) == 0:
+            continue
+
+        row_info = {
+            "homework_chat_id": homework_chat_value,
+            "tracker_chat_id": tracker_chat_candidate,
+            "tariff": "" if tariff_raw is None else str(tariff_raw).strip(),
+        }
+
+        priority = (
+            1 if tracker_chat_explicit is not None else 0,
+            parse_sheet_date_to_ts(flow_date_raw),
+            idx,
+        )
+
+        if email_key not in priorities or priority > priorities[email_key]:
+            priorities[email_key] = priority
+            result[email_key] = row_info
+
+    return result
+
+
+async def broadcast_to_user_ws_connections(connections: Dict[str, list], user_id: str, payload: Dict[str, Any]) -> None:
+    """Безопасная отправка события во все WebSocket-соединения пользователя."""
+    user_connections = list(connections.get(user_id, []))
+    stale_connections = []
+
+    for ws in user_connections:
+        try:
+            await ws.send_json(payload)
+        except Exception:
+            stale_connections.append(ws)
+
+    if stale_connections:
+        current_connections = connections.get(user_id, [])
+        for ws in stale_connections:
+            if ws in current_connections:
+                current_connections.remove(ws)
 
 
 def get_creds():
@@ -626,7 +719,7 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
         return
 
     load_users_additional_info()
-    user_email = (user_data[0].get("email") or "").lower().strip()
+    user_email = clean_string(user_data[0].get("email") or "")
 
     try:
         users_flow = db.get_flow_by_email(user_email)
@@ -776,8 +869,7 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                     continue
 
             # отправляем ВСЕМ подключённым (включая отправителя)
-            for ws in config.ws_connections[user_id]:
-                await ws.send_json(message_payload)
+            await broadcast_to_user_ws_connections(config.ws_connections, user_id, message_payload)
 
     except WebSocketDisconnect:
         if user_id in config.ws_connections and websocket in config.ws_connections[user_id]:
@@ -804,7 +896,7 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
         return
     
     load_users_additional_info()
-    user_email = (user_data[0]["email"] or "").lower().strip()
+    user_email = clean_string(user_data[0]["email"] or "")
     
     # Проверяем, есть ли email в конфиге
     if user_email not in config.USERS_ADDITIONAL_INFO:
@@ -886,8 +978,7 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                     return
             
             # отправляем ВСЕМ подключённым (включая отправителя)
-            for ws in config.ws_connections[user_id]:
-                await ws.send_json(message_payload)
+            await broadcast_to_user_ws_connections(config.ws_connections, user_id, message_payload)
 
             # Если есть текст и нет картинки - отправляем текстовое сообщение
             if text and not image_base64:
@@ -933,13 +1024,30 @@ async def handle_alice_request(request: Request):
     html_messages = ''
 
     for db_user in db_users_list:
-        user = db.get_user_by_email_with_valid_tg_id(db_user)
+        canonical_email = db_user
+        normalized_email = clean_string(db_user)
+
+        try:
+            found_in_users = db.find_user_email(db_user)
+            if found_in_users:
+                canonical_email = found_in_users
+        except Exception:
+            pass
+
+        try:
+            found_in_access = db.find_users_access_email(db_user)
+            if found_in_access and clean_string(found_in_access) == normalized_email:
+                canonical_email = found_in_access
+        except Exception:
+            pass
+
+        user = db.get_user_by_email_with_valid_tg_id(canonical_email)
 
         if user is None:
-            users_list = db.get_user_by_email(db_user)
+            users_list = db.get_user_by_email(canonical_email)
             if len(users_list) == 0:
                 # Фолбэк: берём user_id из link_access по email, чтобы не терять ученика в списке
-                link_access_rows = db.get_link_access_by_email(db_user)
+                link_access_rows = db.get_link_access_by_email(canonical_email)
                 recovered_user_id = None
 
                 for row in link_access_rows:
@@ -952,13 +1060,13 @@ async def handle_alice_request(request: Request):
                     continue
 
                 try:
-                    db.add_user(recovered_user_id, db_user.lower())
+                    db.add_user(recovered_user_id, canonical_email.lower())
                 except Exception:
                     pass
 
-                users_list = db.get_user_by_email(db_user)
+                users_list = db.get_user_by_email(canonical_email)
                 if len(users_list) == 0:
-                    user = {"tg_id": recovered_user_id, "email": db_user.lower()}
+                    user = {"tg_id": recovered_user_id, "email": canonical_email.lower()}
                 else:
                     user = users_list[0]
 
@@ -1565,8 +1673,7 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                     continue
 
             # отправляем ВСЕМ подключённым (включая отправителя)
-            for ws in config.ws_connections_support[user_id]:
-                await ws.send_json(message_payload)
+            await broadcast_to_user_ws_connections(config.ws_connections_support, user_id, message_payload)
 
     except WebSocketDisconnect:
         if user_id in config.ws_connections_support and websocket in config.ws_connections_support[user_id]:
@@ -1649,8 +1756,7 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                     return
             
             # отправляем ВСЕМ подключённым (включая отправителя)
-            for ws in config.ws_connections_support[user_id]:
-                await ws.send_json(message_payload)
+            await broadcast_to_user_ws_connections(config.ws_connections_support, user_id, message_payload)
 
             # Если есть текст и нет картинки - отправляем текстовое сообщение
             if text and not image_base64:
@@ -2031,8 +2137,7 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                     print(f"Ошибка при отправке сообщения трекеру {user_id}: {e}")
 
             # отправляем ВСЕМ подключённым (включая отправителя)
-            for ws in config.ws_connections_psychologist[user_id]:
-                await ws.send_json(message_payload)
+            await broadcast_to_user_ws_connections(config.ws_connections_psychologist, user_id, message_payload)
 
     except WebSocketDisconnect:
         if user_id in config.ws_connections_psychologist:
@@ -2112,8 +2217,7 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                     return
             
             # отправляем ВСЕМ подключённым (включая отправителя)
-            for ws in config.ws_connections_psychologist[user_id]:
-                await ws.send_json(message_payload)
+            await broadcast_to_user_ws_connections(config.ws_connections_psychologist, user_id, message_payload)
 
             # Если есть текст и нет картинки - отправляем текстовое сообщение
             if text and not image_base64:
@@ -2236,42 +2340,7 @@ async def check_info():
     try:
         table_2 = await ss_2.get_worksheet_by_id(0)
         table_2_data = await table_2.get_all_values()
-
-        for row in table_2_data[1:]:
-            # Поддерживаем разные версии структуры листа users:
-            # минимум нужен только email + хотя бы одна колонка chat_id.
-            if len(row) < 2:
-                continue
-
-            email_raw = row[0]
-            flow_raw = row[2] if len(row) > 2 else ""
-            tracker_chat_raw = row[4] if len(row) > 4 else ""
-            homework_chat_raw = row[1] if len(row) > 1 else ""
-            tariff_raw = row[5] if len(row) > 5 else ""
-
-            if email_raw is None:
-                continue
-
-            if len(str(email_raw).strip()) == 0:
-                continue
-
-            # Приоритет: communication chat из колонки tracker_chat (row[4]).
-            # Фолбэк: если он пустой/битый, берём row[1] (исторические таблицы).
-            tracker_chat_candidate = parse_chat_id_value(tracker_chat_raw)
-            if tracker_chat_candidate is None:
-                tracker_chat_candidate = parse_chat_id_value(homework_chat_raw)
-
-            if tracker_chat_candidate is None:
-                continue
-
-            homework_chat_value = parse_chat_id_value(homework_chat_raw) or ""
-
-            email_key = clean_string(str(email_raw).lower().strip())
-            config.USERS_ADDITIONAL_INFO[email_key] = {
-                "homework_chat_id": homework_chat_value,
-                "tracker_chat_id": tracker_chat_candidate,
-                "tariff": "" if tariff_raw is None else str(tariff_raw).strip(),
-            }
+        config.USERS_ADDITIONAL_INFO = build_users_additional_info(table_2_data[1:])
         dump_users_additional_info()
     except Exception as e:
         print(f"Ошибка при обновлении: {e}")
@@ -2487,41 +2556,10 @@ async def check_info():
                     table_2 = await ss_2.get_worksheet_by_id(0)
                     table_2_data = await table_2.get_all_values()
 
-                    for idx, row in enumerate(table_2_data[1:], start=1):
-                        if idx % 25 == 0:
-                            await asyncio.sleep(0)
+                    rebuilt_info = build_users_additional_info(table_2_data[1:])
+                    changed_emails = []
 
-                        if len(row) < 2:
-                            continue
-
-                        email_raw = row[0]
-                        flow_raw = row[2] if len(row) > 2 else ""
-                        tracker_chat_raw = row[4] if len(row) > 4 else ""
-                        homework_chat_raw = row[1] if len(row) > 1 else ""
-                        tariff_raw = row[5] if len(row) > 5 else ""
-
-                        if email_raw is None:
-                            continue
-
-                        if len(str(email_raw).strip()) == 0:
-                            continue
-
-                        tracker_chat_candidate = parse_chat_id_value(tracker_chat_raw)
-                        if tracker_chat_candidate is None:
-                            tracker_chat_candidate = parse_chat_id_value(homework_chat_raw)
-
-                        if tracker_chat_candidate is None:
-                            continue
-
-                        homework_chat_value = parse_chat_id_value(homework_chat_raw) or ""
-
-                        email_key = clean_string(str(email_raw).lower().strip())
-                        row_info = {
-                            "homework_chat_id": homework_chat_value,
-                            "tracker_chat_id": tracker_chat_candidate,
-                            "tariff": "" if tariff_raw is None else str(tariff_raw).strip(),
-                        }
-
+                    for email_key, row_info in rebuilt_info.items():
                         current_info = config.USERS_ADDITIONAL_INFO.get(email_key, {})
                         if (
                             email_key not in config.USERS_ADDITIONAL_INFO
@@ -2529,8 +2567,12 @@ async def check_info():
                             or row_info["tracker_chat_id"] != current_info.get("tracker_chat_id", "")
                             or row_info["tariff"] != current_info.get("tariff", "")
                         ):
-                            config.USERS_ADDITIONAL_INFO[email_key] = row_info
-                            print(f'Добавлено в ЛС трекеров: {row}')
+                            changed_emails.append(email_key)
+
+                    config.USERS_ADDITIONAL_INFO = rebuilt_info
+
+                    for email_key in changed_emails[:100]:
+                        print(f"[SYNC] Обновлено назначение трекера для {email_key}")
                     dump_users_additional_info()
                         
                 except Exception as e:
