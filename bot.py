@@ -1012,8 +1012,27 @@ async def handle_alice_request(request: Request):
 
     db_users_from_config = db.get_users_by_tracker_chat_id(chat_id)
     db_users_from_access = db.get_users_access_emails_by_chat_id(chat_id)
-    db_users_from_homework = db.get_users_emails_by_homework_chat_id(chat_id)
-    db_users_from_messages = db.get_users_emails_by_tracker_messages_chat_id(chat_id)
+
+    # ВАЖНО:
+    # Список учеников трекера должен показывать ТЕКУЩИЕ назначения,
+    # а не исторические взаимодействия.
+    #
+    # Источники homework/trackers_messages содержат архив и при переводе
+    # ученика в другой чат продолжали «подмешивать» старых учеников,
+    # из-за чего трекер видел завершённые потоки.
+    #
+    # Поэтому используем только актуальные источники:
+    # - users_additional_info (таблица users, tracker_chat_id)
+    # - users_access.chat_id (legacy/fallback)
+    #
+    # Исторические источники можно использовать лишь как fallback, если вдруг
+    # в актуальных источниках совсем пусто.
+    db_users_from_homework = []
+    db_users_from_messages = []
+    if len(db_users_from_config) == 0 and len(db_users_from_access) == 0:
+        db_users_from_homework = db.get_users_emails_by_homework_chat_id(chat_id)
+        db_users_from_messages = db.get_users_emails_by_tracker_messages_chat_id(chat_id)
+
     # Важно: для поиска пользователя в БД используем "сырой" email (как в источнике),
     # а нормализацию применяем только для дедупликации ключа.
     # Иначе при скрытых символах в БД можно потерять совпадение и получить пустой список.

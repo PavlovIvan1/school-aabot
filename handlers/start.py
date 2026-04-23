@@ -141,6 +141,63 @@ def get_sync_creds():
     ])
 
 
+def parse_chat_id_from_sheet(raw_value: Any) -> int:
+    """Нормализация chat_id из Google Sheets в int (поддержка '-100...0')."""
+    if raw_value is None:
+        return 0
+
+    value = str(raw_value).strip().replace(" ", "")
+    if len(value) == 0:
+        return 0
+
+    if value.endswith(".0"):
+        value = value[:-2]
+
+    try:
+        return int(value)
+    except Exception:
+        return 0
+
+
+async def find_access_in_users_sheet(normalized_email: str) -> Optional[Dict[str, Any]]:
+    """Проверяет наличие email напрямую в Google-таблице users.
+
+    Используется как последний fallback при авторизации, когда локальная БД/кэш
+    ещё не успели синхронизироваться.
+    """
+    if len(normalized_email) == 0:
+        return None
+
+    try:
+        agcm = gspread_asyncio.AsyncioGspreadClientManager(get_sync_creds)
+        agc = await agcm.authorize()
+        ss_users = await agc.open_by_url(config.SPREADSHEET_URL_USERS)
+        table = await ss_users.get_worksheet_by_id(0)
+        rows = await table.get_all_values()
+
+        for row in rows[1:]:
+            if len(row) == 0:
+                continue
+
+            email_raw = row[0] if len(row) > 0 else ""
+            flow_raw = row[2] if len(row) > 2 else ""
+            chat_id_raw = row[1] if len(row) > 1 else ""
+
+            email_key = normalize_email(email_raw)
+            if email_key != normalized_email:
+                continue
+
+            return {
+                "email": email_key,
+                "flow": str(flow_raw).strip() if flow_raw is not None else "",
+                "chat_id": parse_chat_id_from_sheet(chat_id_raw),
+            }
+    except Exception as e:
+        print(f"[AUTH] direct users-sheet lookup failed for {normalized_email}: {e}")
+
+    return None
+
+
 async def force_sync_sheets_now():
     agcm = gspread_asyncio.AsyncioGspreadClientManager(get_sync_creds)
     agc = await agcm.authorize()
@@ -686,11 +743,8 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
                 pass
 
             ensure_user_binding(message.from_user.id, link_access_data[0]['email'])
-            # Добавляем пользователя в Google Таблицу
-            try:
-                await add_user_to_spreadsheet(message.from_user.id, link_access_data[0]['email'], db.get_flow_by_email(link_access_data[0]['email']), message.bot)
-            except Exception as e:
-                print(f"Ошибка при добавлении в Google Таблицу: {e}")
+            # ВАЖНО: не добавляем пользователя в таблицу users из бота.
+            # Таблица наполняется внешними источниками (GetCourse/владельцы).
         else:
             await state.set_state(GetAccess.email)
             
@@ -1175,6 +1229,27 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
         is_access = True
         access_email = normalized_email
 
+    # Последний фолбэк: прямой запрос к таблице users.
+    # Это закрывает кейс, когда ученик уже есть в Google Sheets,
+    # но локальный sync/БД ещё не успели обновиться.
+    if not is_access:
+        sheet_access = await find_access_in_users_sheet(normalized_email)
+        if sheet_access is not None:
+            is_access = True
+            access_email = sheet_access["email"]
+            access_flow = sheet_access.get("flow") or access_flow
+
+            try:
+                if not db.is_email_in_users_access(access_email):
+                    db.insert_email(
+                        access_email,
+                        int(sheet_access.get("chat_id") or 0),
+                        str(access_flow or "").strip(),
+                    )
+            except Exception:
+                # Не валим авторизацию из-за race condition в sync-потоке.
+                pass
+
     if is_access:
         ensure_user_binding(message.from_user.id, access_email)
         await state.clear()
@@ -1186,11 +1261,8 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
             except Exception:
                 users_flow = "0"
         
-        # Добавляем пользователя в Google Таблицу
-        try:
-            await add_user_to_spreadsheet(message.from_user.id, access_email, users_flow, message.bot)
-        except Exception as e:
-            print(f"Ошибка при добавлении в Google Таблицу: {e}")
+        # ВАЖНО: при авторизации НЕ пишем в таблицу users.
+        # Только проверяем наличие email и пускаем в бот.
 
         hide_learning_buttons = should_hide_learning_buttons(users_flow)
 
