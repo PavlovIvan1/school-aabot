@@ -182,6 +182,7 @@ async def find_access_in_users_sheet(normalized_email: str) -> Optional[Dict[str
             email_raw = row[0] if len(row) > 0 else ""
             flow_raw = row[2] if len(row) > 2 else ""
             chat_id_raw = row[1] if len(row) > 1 else ""
+            tracker_chat_raw = row[4] if len(row) > 4 else ""
 
             email_key = normalize_email(email_raw)
             if email_key != normalized_email:
@@ -191,11 +192,28 @@ async def find_access_in_users_sheet(normalized_email: str) -> Optional[Dict[str
                 "email": email_key,
                 "flow": str(flow_raw).strip() if flow_raw is not None else "",
                 "chat_id": parse_chat_id_from_sheet(chat_id_raw),
+                "tracker_chat_id": parse_chat_id_from_sheet(tracker_chat_raw),
             }
     except Exception as e:
         print(f"[AUTH] direct users-sheet lookup failed for {normalized_email}: {e}")
 
     return None
+
+
+def get_users_additional_info_by_email(normalized_email: str) -> Dict[str, Any]:
+    """Возвращает запись из USERS_ADDITIONAL_INFO по нормализованному email."""
+    if len(normalized_email) == 0:
+        return {}
+
+    direct = config.USERS_ADDITIONAL_INFO.get(normalized_email)
+    if isinstance(direct, dict):
+        return direct
+
+    for raw_email, row_info in config.USERS_ADDITIONAL_INFO.items():
+        if normalize_email(raw_email) == normalized_email and isinstance(row_info, dict):
+            return row_info
+
+    return {}
 
 
 async def force_sync_sheets_now():
@@ -1735,28 +1753,43 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
     except:
         pass
 
-    email_key = user_data[0]["email"].lower().strip()
+    email_key = normalize_email(user_data[0]["email"])
     load_users_additional_info_from_file()
+
+    user_additional_info = get_users_additional_info_by_email(email_key)
 
     tracker_chat_id = None
     homework_chat_from_config = None
     try:
-        tracker_chat_raw = config.USERS_ADDITIONAL_INFO.get(email_key, {}).get("tracker_chat_id")
+        tracker_chat_raw = user_additional_info.get("tracker_chat_id")
         if tracker_chat_raw is not None and str(tracker_chat_raw).lstrip('-').isdigit():
             tracker_chat_id = int(tracker_chat_raw)
     except Exception:
         pass
 
     try:
-        homework_chat_raw = config.USERS_ADDITIONAL_INFO.get(email_key, {}).get("homework_chat_id")
+        homework_chat_raw = user_additional_info.get("homework_chat_id")
         if homework_chat_raw is not None and str(homework_chat_raw).lstrip('-').isdigit():
             homework_chat_from_config = int(homework_chat_raw)
     except Exception:
         pass
 
+    # Последний fallback: читаем users-таблицу напрямую, если кэш ещё не успел обновиться.
+    if tracker_chat_id is None and homework_chat_from_config is None:
+        sheet_access = await find_access_in_users_sheet(email_key)
+        if sheet_access is not None:
+            sheet_tracker_chat = int(sheet_access.get("tracker_chat_id") or 0)
+            sheet_homework_chat = int(sheet_access.get("chat_id") or 0)
+
+            if sheet_tracker_chat != 0:
+                tracker_chat_id = sheet_tracker_chat
+            if sheet_homework_chat != 0:
+                homework_chat_from_config = sheet_homework_chat
+
     homework_chat_from_access = None
     try:
-        access_chat_raw = db.get_chat_id(email_key)
+        access_email = db.find_users_access_email(email_key) or email_key
+        access_chat_raw = db.get_chat_id(access_email)
         if access_chat_raw is not None and str(access_chat_raw).lstrip('-').isdigit():
             homework_chat_from_access = int(access_chat_raw)
     except Exception:
