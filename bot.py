@@ -1086,18 +1086,21 @@ async def handle_alice_request(request: Request):
                         break
 
                 if recovered_user_id is None:
-                    continue
-
-                try:
-                    db.add_user(recovered_user_id, canonical_email.lower())
-                except Exception:
-                    pass
-
-                users_list = db.get_user_by_email(canonical_email)
-                if len(users_list) == 0:
-                    user = {"tg_id": recovered_user_id, "email": canonical_email.lower()}
+                    # Критично: не скрываем ученика из /list, даже если пока
+                    # не удалось восстановить tg_id.
+                    user = {"tg_id": None, "email": canonical_email.lower()}
+                    users_list = [user]
                 else:
-                    user = users_list[0]
+                    try:
+                        db.add_user(recovered_user_id, canonical_email.lower())
+                    except Exception:
+                        pass
+
+                    users_list = db.get_user_by_email(canonical_email)
+                    if len(users_list) == 0:
+                        user = {"tg_id": recovered_user_id, "email": canonical_email.lower()}
+                    else:
+                        user = users_list[0]
 
             # Фолбэк: пробуем восстановить валидный TG ID через username
             # (если по email попалась запись с пустым/нулевым tg_id).
