@@ -10,6 +10,21 @@ class MySQL:
     def _normalize_email_value(email: str) -> str:
         return re.sub(r"[\u200B-\u200D\uFEFF\s]+", "", (email or "").lower())
 
+    @staticmethod
+    def _normalize_chat_id_value(chat_id) -> str:
+        """Нормализует chat_id из БД/Sheets к сопоставимому строковому виду."""
+        if chat_id is None:
+            return ""
+
+        value = str(chat_id).strip().replace(" ", "")
+        if len(value) == 0:
+            return ""
+
+        if value.endswith(".0"):
+            value = value[:-2]
+
+        return value
+
     def __init__(self):
         self.database = mysql.connector.connect(
             user=config.DATABASE_USER,
@@ -1256,16 +1271,31 @@ FROM student_messages
     
     def get_users_by_tracker_chat_id(self, tracker_chat_id):
         users_list = []
+        tracker_chat_key = self._normalize_chat_id_value(tracker_chat_id)
         for user, data in config.USERS_ADDITIONAL_INFO.items():
-            if str(data['tracker_chat_id']) == str(tracker_chat_id):
+            if self._normalize_chat_id_value(data.get('tracker_chat_id')) == tracker_chat_key:
                 users_list.append(user)
         return users_list
 
     def get_users_access_emails_by_chat_id(self, tracker_chat_id):
-        """Возвращает emails учеников из users_access по chat_id трекера"""
-        self.cursor.execute("SELECT DISTINCT mail FROM users_access WHERE chat_id = %s", (tracker_chat_id,))
+        """Возвращает emails учеников из users_access по chat_id трекера.
+
+        В users_access chat_id может быть сохранён в разных форматах
+        (например, `-100...`, `-100....0`, с пробелами), поэтому
+        сравнение выполняем после нормализации в Python.
+        """
+        tracker_chat_key = self._normalize_chat_id_value(tracker_chat_id)
+        self.cursor.execute("SELECT DISTINCT mail, chat_id FROM users_access WHERE mail IS NOT NULL AND mail != ''")
         rows = self.cursor.fetchall()
-        return [row["mail"].lower().strip() for row in rows if row.get("mail")]
+
+        result = []
+        for row in rows:
+            if self._normalize_chat_id_value(row.get("chat_id")) != tracker_chat_key:
+                continue
+
+            result.append(row["mail"].lower().strip())
+
+        return result
 
     def get_users_emails_by_homework_chat_id(self, tracker_chat_id):
         """Возвращает emails учеников, у которых ДЗ закреплено за chat_id трекера."""
