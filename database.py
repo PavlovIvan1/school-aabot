@@ -769,6 +769,108 @@ class MySQL:
     def get_link_access_by_email(self, email: str):
         self.cursor.execute("SELECT * FROM link_access WHERE email = %s", (email,))
         return self.cursor.fetchall()
+
+    def get_users_by_normalized_email(self, email: str):
+        """Возвращает все строки users по нормализованному email."""
+        normalized_email = self._normalize_email_value(email)
+        if not normalized_email:
+            return []
+
+        self.cursor.execute("SELECT * FROM users WHERE email IS NOT NULL AND email != ''")
+        rows = self.cursor.fetchall()
+        return [
+            row for row in rows
+            if self._normalize_email_value(str(row.get("email") or "")) == normalized_email
+        ]
+
+    def get_link_access_by_normalized_email(self, email: str):
+        """Возвращает все строки link_access по нормализованному email."""
+        normalized_email = self._normalize_email_value(email)
+        if not normalized_email:
+            return []
+
+        self.cursor.execute("SELECT * FROM link_access WHERE email IS NOT NULL AND email != ''")
+        rows = self.cursor.fetchall()
+        return [
+            row for row in rows
+            if self._normalize_email_value(str(row.get("email") or "")) == normalized_email
+        ]
+
+    def repair_user_tg_id_by_email(self, email: str):
+        """Пытается восстановить tg_id для email из users/link_access.
+
+        Возвращает словарь с диагностикой и, при успехе, актуальной user-строкой.
+        """
+        normalized_email = self._normalize_email_value(email)
+        if not normalized_email:
+            return {
+                "email": "",
+                "tg_id": None,
+                "users_rows": 0,
+                "link_rows": 0,
+                "user": None,
+            }
+
+        users_rows = self.get_users_by_normalized_email(normalized_email)
+        link_rows = self.get_link_access_by_normalized_email(normalized_email)
+
+        valid_user_ids = []
+        for row in users_rows:
+            tg_id = row.get("tg_id")
+            if tg_id is not None and str(tg_id).lstrip("-").isdigit() and int(tg_id) > 0:
+                valid_user_ids.append(int(tg_id))
+
+        valid_link_ids = []
+        for row in link_rows:
+            user_id = row.get("user_id")
+            if user_id is not None and str(user_id).lstrip("-").isdigit() and int(user_id) > 0:
+                valid_link_ids.append(int(user_id))
+
+        chosen_tg_id = None
+        if len(valid_user_ids) != 0:
+            chosen_tg_id = valid_user_ids[0]
+        elif len(valid_link_ids) != 0:
+            chosen_tg_id = valid_link_ids[-1]
+
+        canonical_email = ""
+        if len(users_rows) != 0:
+            canonical_email = str(users_rows[0].get("email") or "").strip()
+        elif len(link_rows) != 0:
+            canonical_email = str(link_rows[-1].get("email") or "").strip()
+
+        if len(canonical_email) == 0:
+            canonical_email = (
+                self.find_user_email(normalized_email)
+                or self.find_users_access_email(normalized_email)
+                or self.find_link_access_email(normalized_email)
+                or normalized_email
+            )
+
+        user = None
+
+        if chosen_tg_id is not None:
+            try:
+                if len(users_rows) == 0:
+                    self.add_user(chosen_tg_id, canonical_email.lower())
+                else:
+                    self.update_user_tg_id(str(users_rows[0].get("email") or canonical_email), chosen_tg_id)
+            except Exception:
+                pass
+
+            user = self.get_user_by_email_with_valid_tg_id(canonical_email)
+            if user is None:
+                user = {
+                    "tg_id": chosen_tg_id,
+                    "email": canonical_email.lower(),
+                }
+
+        return {
+            "email": canonical_email.lower(),
+            "tg_id": chosen_tg_id,
+            "users_rows": len(users_rows),
+            "link_rows": len(link_rows),
+            "user": user,
+        }
     
     def is_mentor(self, mentor_id: int):
         for i in config.SHEETS_DATA["mentors"]:

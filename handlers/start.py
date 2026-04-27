@@ -2288,28 +2288,11 @@ async def fix_tracker_user_by_email(message: types.Message):
     if '@' not in email or ' ' in email:
         return await message.answer("Неверный формат email. Пример: /fixtracker ilona_76@bk.ru")
 
-    users_rows = db.get_user_by_email(email)
-    link_rows = db.get_link_access_by_email(email)
-
-    valid_user_ids = []
-    for row in users_rows:
-        tg_id = row.get('tg_id')
-        if tg_id is not None and str(tg_id).isdigit() and int(tg_id) > 0:
-            valid_user_ids.append(int(tg_id))
-
-    link_user_ids = []
-    for row in link_rows:
-        link_user_id = row.get('user_id')
-        if link_user_id is not None and str(link_user_id).isdigit() and int(link_user_id) > 0:
-            link_user_ids.append(int(link_user_id))
-
-    chosen_tg_id = None
-
-    # Приоритет: уже валидный tg_id в users, иначе берем самый свежий из link_access
-    if len(valid_user_ids) != 0:
-        chosen_tg_id = valid_user_ids[0]
-    elif len(link_user_ids) != 0:
-        chosen_tg_id = link_user_ids[-1]
+    repair_result = db.repair_user_tg_id_by_email(email)
+    chosen_tg_id = repair_result.get("tg_id")
+    users_rows_count = int(repair_result.get("users_rows") or 0)
+    link_rows_count = int(repair_result.get("link_rows") or 0)
+    repaired_email = (repair_result.get("email") or email).lower().strip()
 
     if chosen_tg_id is None:
         return await message.answer(
@@ -2318,20 +2301,18 @@ async def fix_tracker_user_by_email(message: types.Message):
         )
 
     try:
-        if len(users_rows) == 0:
-            db.add_user(chosen_tg_id, email)
-            action_text = f"Создал запись users: tg_id={chosen_tg_id}"
+        if users_rows_count == 0:
+            action_text = f"Создал/восстановил запись users: tg_id={chosen_tg_id}"
         else:
-            db.update_user_tg_id(email, chosen_tg_id)
             action_text = f"Синхронизировал tg_id в users: {chosen_tg_id}"
 
         open_link = f"https://rb.infinitydev.tw1.su/get_tracker_chat?user_id={chosen_tg_id}"
         await message.answer(
             "✅ Исправление выполнено\n"
-            f"Email: {email}\n"
+            f"Email: {repaired_email}\n"
             f"{action_text}\n"
-            f"users rows: {len(users_rows)}\n"
-            f"link_access rows: {len(link_rows)}\n"
+            f"users rows: {users_rows_count}\n"
+            f"link_access rows: {link_rows_count}\n"
             f"Открыть чат: {open_link}"
         )
     except Exception as e:

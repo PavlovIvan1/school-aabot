@@ -1051,6 +1051,7 @@ async def handle_alice_request(request: Request):
 
     db_users_list = list(dedup_emails.values())
     html_messages = ''
+    repair_cache = {}
 
     for db_user in db_users_list:
         canonical_email = db_user
@@ -1070,13 +1071,27 @@ async def handle_alice_request(request: Request):
         except Exception:
             pass
 
-        user = db.get_user_by_email_with_valid_tg_id(canonical_email)
+        repair_key = clean_string(canonical_email)
+        repair_result = repair_cache.get(repair_key)
+        if repair_result is None:
+            try:
+                repair_result = db.repair_user_tg_id_by_email(canonical_email)
+            except Exception:
+                repair_result = {}
+            repair_cache[repair_key] = repair_result
+
+        repaired_user = repair_result.get("user") if isinstance(repair_result, dict) else None
+        repaired_email = (repair_result.get("email") or canonical_email).lower().strip() if isinstance(repair_result, dict) else canonical_email
+        if len(repaired_email) != 0:
+            canonical_email = repaired_email
+
+        user = repaired_user or db.get_user_by_email_with_valid_tg_id(canonical_email)
 
         if user is None:
-            users_list = db.get_user_by_email(canonical_email)
+            users_list = db.get_users_by_normalized_email(canonical_email)
             if len(users_list) == 0:
                 # Фолбэк: берём user_id из link_access по email, чтобы не терять ученика в списке
-                link_access_rows = db.get_link_access_by_email(canonical_email)
+                link_access_rows = db.get_link_access_by_normalized_email(canonical_email)
                 recovered_user_id = None
 
                 for row in link_access_rows:
