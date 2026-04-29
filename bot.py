@@ -488,20 +488,34 @@ async def handle_alice_request(request: Request):
 @app.get("/get_tracker_chat")
 async def handle_alice_request(request: Request):
     try:
-        user_id = request.query_params.get("user_id", "")
-        if not user_id:
-            raise ValueError("user_id not found in query parameters")
-        
-        # Проверяем, что user_id число
-        try:
-            user_id_int = int(user_id)
-        except ValueError:
+        user_id = (request.query_params.get("user_id", "") or "").strip()
+        email_param = (request.query_params.get("email", "") or "").strip().lower()
+
+        user_id_int = None
+        if user_id:
+            try:
+                user_id_int = int(user_id)
+            except ValueError:
+                user_id_int = None
+
+        # Фолбэк: если user_id отсутствует/невалидный/нулевой — пробуем восстановить по email
+        if (user_id_int is None or user_id_int == 0) and email_param:
+            try:
+                repair_result = db.repair_user_tg_id_by_email(email_param)
+            except Exception:
+                repair_result = {}
+
+            repaired_tg_id = repair_result.get("tg_id") if isinstance(repair_result, dict) else None
+            if repaired_tg_id is not None and str(repaired_tg_id).lstrip('-').isdigit() and int(repaired_tg_id) != 0:
+                user_id_int = int(repaired_tg_id)
+                user_id = str(user_id_int)
+
+        if user_id_int is None:
             return HTMLResponse(content="<html><body><h1>Неверный ID пользователя</h1></body></html>", status_code=400)
-        
-        # Проверяем, что user_id валидный (не 0)
+
         if user_id_int == 0:
             return HTMLResponse(content="<html><body><h1>У ученика нет Telegram аккаунта. Попросите ученика написать боту /start</h1></body></html>", status_code=400)
-        
+
         tracker_messages_list = db.get_trackers_messages_by_tg_id(user_id_int)
         user_data = db.get_user(user_id_int)
 
@@ -1008,7 +1022,10 @@ async def handle_alice_request(request: Request):
     load_users_additional_info()
     load_sheets_data_from_file()
 
-    chat_id = int(str(request.url).split("chat_id=")[-1].split("&")[0].replace("%40", "@")) # TODO привести в нормальный вид
+    chat_id_raw = (request.query_params.get("chat_id", "") or "").strip().replace("%40", "@")
+    if not chat_id_raw or not chat_id_raw.lstrip("-").isdigit():
+        return HTMLResponse(content="<html><body><h1>Неверный chat_id</h1></body></html>", status_code=400)
+    chat_id = int(chat_id_raw)
 
     db_users_from_config = db.get_users_by_tracker_chat_id(chat_id)
     db_users_from_access = db.get_users_access_emails_by_chat_id(chat_id)
@@ -1153,7 +1170,14 @@ async def handle_alice_request(request: Request):
         else:
             tg_username = "Не найден"
             name = "Не найден"
-            user_link_html = "<span class=\"email\">Нет Telegram ID</span>"
+            # Не теряем ссылку в списке: даём fallback-переход по email,
+            # а /get_tracker_chat уже попытается восстановить tg_id автоматически.
+            fallback_email = (user.get("email") or canonical_email or "").lower().strip()
+            if fallback_email:
+                fallback_link = f'https://rb.infinitydev.tw1.su/get_tracker_chat?email={fallback_email}'
+                user_link_html = f'<a href="{fallback_link}" target="_blank">{fallback_link}</a>'
+            else:
+                user_link_html = "<span class=\"email\">Нет Telegram ID</span>"
 
         html_messages += f'''<tr>
     <td>{user_link_html}</td>
