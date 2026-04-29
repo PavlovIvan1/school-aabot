@@ -216,6 +216,59 @@ def get_users_additional_info_by_email(normalized_email: str) -> Dict[str, Any]:
     return {}
 
 
+async def notify_tracker_about_user_authorization(
+    bot,
+    access_email: str,
+    users_flow: Optional[str],
+    authorized_at: Optional[datetime.datetime] = None,
+) -> None:
+    """Отправляет трекеру уведомление об успешной авторизации ученика."""
+    try:
+        email_key = normalize_email(access_email)
+        load_users_additional_info_from_file()
+
+        user_additional_info = get_users_additional_info_by_email(email_key)
+        tracker_chat_id_raw = user_additional_info.get("tracker_chat_id") if isinstance(user_additional_info, dict) else None
+
+        tracker_chat_id = None
+        if tracker_chat_id_raw is not None and str(tracker_chat_id_raw).lstrip('-').isdigit():
+            tracker_chat_id = int(tracker_chat_id_raw)
+
+        # Последний fallback: прямое чтение users-таблицы, если кэш ещё не обновился.
+        if tracker_chat_id is None:
+            sheet_access = await find_access_in_users_sheet(email_key)
+            if sheet_access is not None:
+                sheet_tracker_chat = int(sheet_access.get("tracker_chat_id") or 0)
+                if sheet_tracker_chat != 0:
+                    tracker_chat_id = sheet_tracker_chat
+                if (not users_flow) and sheet_access.get("flow"):
+                    users_flow = str(sheet_access.get("flow")).strip()
+
+        if tracker_chat_id is None:
+            return
+
+        moscow_tz = datetime.timezone(datetime.timedelta(hours=3))
+        auth_dt = authorized_at or datetime.datetime.now(moscow_tz)
+        if auth_dt.tzinfo is None:
+            auth_dt = auth_dt.replace(tzinfo=moscow_tz)
+
+        flow_value = str(users_flow or "").strip() or "не указан"
+        auth_time_text = auth_dt.astimezone(moscow_tz).strftime("%d.%m.%Y %H:%M:%S")
+
+        notify_text = (
+            f"Ученик: {email_key}\n"
+            f"Авторизовался в боте в {auth_time_text} (МСК)\n"
+            f"Поток ученика: {flow_value}"
+        )
+
+        await bot.send_message(tracker_chat_id, notify_text)
+    except Exception as e:
+        print(
+            "[AUTH_NOTIFY] failed to send tracker authorization notification: "
+            f"email={access_email}, flow={users_flow}, error={e}"
+        )
+
+
 async def force_sync_sheets_now():
     agcm = gspread_asyncio.AsyncioGspreadClientManager(get_sync_creds)
     agc = await agcm.authorize()
@@ -1300,6 +1353,12 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
             await message.bot.send_message(config.LOG_CHAT_ID, f'Новый пользователь в боте: {message.from_user.full_name} @{message.from_user.username} (ID: {message.from_user.id})\nПочта: {access_email}')
         except:
             pass
+
+        await notify_tracker_about_user_authorization(
+            bot=message.bot,
+            access_email=access_email,
+            users_flow=users_flow,
+        )
     else:
         await message.answer('''Не вижу тебя в списке учеников.
 
