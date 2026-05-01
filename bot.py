@@ -912,6 +912,16 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
     
     # Проверяем, есть ли пользователь в базе
     if len(user_data) == 0:
+        # Фолбэк: пытаемся восстановить пользователя через link_access
+        link_access_rows = db.get_link_access_by_user_id(str(user_id))
+        if len(link_access_rows) != 0 and link_access_rows[0].get("email"):
+            try:
+                db.add_user(int(user_id), link_access_rows[0]["email"].lower())
+                user_data = db.get_user(int(user_id))
+            except Exception:
+                pass
+
+    if len(user_data) == 0:
         await websocket.send_json({
             "type": "error",
             "message": "Пользователь не найден в базе данных"
@@ -927,6 +937,27 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
         tracker_chat_id = ""
     else:
         tracker_chat_id = config.USERS_ADDITIONAL_INFO[user_email].get("tracker_chat_id", "")
+
+    # Фолбэк: берём tracker_chat_id напрямую из users-sheet (колонка E)
+    if not tracker_chat_id:
+        try:
+            agc = await agcm.authorize()
+            ss_users = await agc.open_by_url(config.SPREADSHEET_URL_USERS)
+            table = await ss_users.get_worksheet_by_id(0)
+            rows = await table.get_all_values()
+
+            for row in rows[1:]:
+                row_email = clean_string(row[0] if len(row) > 0 else "")
+                if row_email != user_email:
+                    continue
+
+                tracker_chat_raw = row[4] if len(row) > 4 else ""
+                tracker_chat_candidate = parse_chat_id_value(tracker_chat_raw)
+                if tracker_chat_candidate is not None:
+                    tracker_chat_id = tracker_chat_candidate
+                break
+        except Exception as e:
+            print(f"[WS tracker_to_user] users-sheet fallback failed for {user_email}: {e}")
     
     if not tracker_chat_id:
         await websocket.send_json({
@@ -945,26 +976,7 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
 
             unix_time = int(time.time())
 
-            # ✅ сохраняем сообщение
-            tracker_message_id = db.add_to_trackers_messages(
-                user_id,
-                tracker_chat_id,
-                text,
-                None,
-                None,
-                False,
-                unix_time,
-                None
-            )
-
-            # ✅ сервер рассылает событие (источник истины)
-            message_payload = {
-                "type": "message",
-                "message_id": tracker_message_id,
-                "text": text,
-                "sender_id": "0",
-                "unix_time": unix_time
-            }
+            message_payload = None
 
             if image_base64:
                 # Декодируем base64 и отправляем фото пользователю
@@ -990,8 +1002,26 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                         reply_markup=keyboard.tracker_keyboard_2()
                     )
                     
-                    # Добавляем image в payload для web с правильным data URL
-                    message_payload["image"] = f"data:image/jpeg;base64,{image_base64}"
+                    # Сохраняем и рассылаем только после успешной доставки пользователю
+                    tracker_message_id = db.add_to_trackers_messages(
+                        user_id,
+                        tracker_chat_id,
+                        text,
+                        None,
+                        None,
+                        False,
+                        unix_time,
+                        None
+                    )
+
+                    message_payload = {
+                        "type": "message",
+                        "message_id": tracker_message_id,
+                        "text": text,
+                        "sender_id": "0",
+                        "unix_time": unix_time,
+                        "image": f"data:image/jpeg;base64,{image_base64}"
+                    }
                 except Exception as e:
                     print(f"Ошибка при отправке фото: {e}")
                     error_payload = {
@@ -999,17 +1029,41 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                         "message": "Не удалось отправить изображение. Пожалуйста, попробуйте ещё раз или отправьте изображение напрямую в чат с ботом."
                     }
                     await websocket.send_json(error_payload)
-                    return
+                    continue
             
             # отправляем ВСЕМ подключённым (включая отправителя)
-            await broadcast_to_user_ws_connections(config.ws_connections, user_id, message_payload)
+            if message_payload is not None:
+                await broadcast_to_user_ws_connections(config.ws_connections, user_id, message_payload)
 
             # Если есть текст и нет картинки - отправляем текстовое сообщение
             if text and not image_base64:
                 try:
                     await bot.send_message(int(user_id), text, reply_markup=keyboard.tracker_keyboard_2())
-                except:
-                    pass
+                    tracker_message_id = db.add_to_trackers_messages(
+                        user_id,
+                        tracker_chat_id,
+                        text,
+                        None,
+                        None,
+                        False,
+                        unix_time,
+                        None
+                    )
+
+                    message_payload = {
+                        "type": "message",
+                        "message_id": tracker_message_id,
+                        "text": text,
+                        "sender_id": "0",
+                        "unix_time": unix_time
+                    }
+                    await broadcast_to_user_ws_connections(config.ws_connections, user_id, message_payload)
+                except Exception as e:
+                    print(f"[WS tracker_to_user] delivery failed user_id={user_id}: {e}")
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "Не удалось доставить сообщение ученику."
+                    })
 
     except WebSocketDisconnect:
         config.ws_connections[user_id].remove(websocket)
@@ -1162,17 +1216,21 @@ async def handle_alice_request(request: Request):
                 tg_username = tg_data.username if tg_data.username else "(без username)"
                 name = tg_data.first_name if tg_data.first_name else "Пользователь"
             except:
-                tg_username = "Не найден"
-                name = "Не найден"
+                tg_username = "(без username)"
+                fallback_email = (user.get("email") or canonical_email or "").lower().strip()
+                name = fallback_email.split("@")[0] if "@" in fallback_email else "Пользователь"
 
+            fallback_email = (user.get("email") or canonical_email or "").lower().strip()
             user_link = f'https://rb.infinitydev.tw1.su/get_tracker_chat?user_id={int(tg_id)}'
+            if fallback_email:
+                user_link += f'&email={fallback_email}'
             user_link_html = f'<a href="{user_link}" target="_blank">{user_link}</a>'
         else:
-            tg_username = "Не найден"
-            name = "Не найден"
+            tg_username = "(без username)"
+            fallback_email = (user.get("email") or canonical_email or "").lower().strip()
+            name = fallback_email.split("@")[0] if "@" in fallback_email else "Пользователь"
             # Не теряем ссылку в списке: даём fallback-переход по email,
             # а /get_tracker_chat уже попытается восстановить tg_id автоматически.
-            fallback_email = (user.get("email") or canonical_email or "").lower().strip()
             if fallback_email:
                 fallback_link = f'https://rb.infinitydev.tw1.su/get_tracker_chat?email={fallback_email}'
                 user_link_html = f'<a href="{fallback_link}" target="_blank">{fallback_link}</a>'
