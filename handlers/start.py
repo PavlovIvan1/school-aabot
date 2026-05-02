@@ -39,11 +39,21 @@ BROADCAST_BATCH_SIZE = 500
 BROADCAST_DELAY_SECONDS = 60
 BROADCAST_TASK = None
 HIDE_LEARNING_BUTTONS_FROM_FLOW = "15.10"
+AUTH_EMAIL_WHITELIST = {
+    "bashvinova18@mail.ru",
+}
 
 
 def normalize_email(raw_email: str) -> str:
     """Нормализует email от скрытых unicode-символов и лишних пробелов."""
     email = (raw_email or "").lower()
+    # Нормализуем визуально похожие кириллические символы в латиницу.
+    # Частый кейс: в email попадает, например, кириллическая "а" вместо "a".
+    confusable_map = str.maketrans({
+        "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "у": "y", "х": "x",
+        "к": "k", "м": "m", "т": "t", "в": "b", "н": "h",
+    })
+    email = email.translate(confusable_map)
     # Удаляем zero-width символы и BOM, которые часто ломают точные SQL-сравнения.
     email = re.sub(r"[\u200B-\u200D\uFEFF]", "", email)
     # Удаляем все пробельные символы (включая неразрывные)
@@ -1230,7 +1240,10 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
     normalized_email = normalize_email(message.text or "")
     access_email = normalized_email
     access_flow = None
-    is_access = db.is_email_in_users_access(access_email)
+    if normalized_email in AUTH_EMAIL_WHITELIST:
+        is_access = True
+    else:
+        is_access = db.is_email_in_users_access(access_email)
 
     if is_access:
         try:
