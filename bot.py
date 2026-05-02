@@ -909,6 +909,7 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
         config.ws_connections[user_id].append(websocket)
 
     user_data = db.get_user(int(user_id))
+    effective_user_id = int(user_id)
     
     # Проверяем, есть ли пользователь в базе
     if len(user_data) == 0:
@@ -931,6 +932,15 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
     
     load_users_additional_info()
     user_email = clean_string(user_data[0]["email"] or "")
+
+    # Доп. синхронизация: если tg_id у email разъехался, берём актуальный id.
+    try:
+        repair_result = db.repair_user_tg_id_by_email(user_email)
+        repaired_tg_id = repair_result.get("tg_id") if isinstance(repair_result, dict) else None
+        if repaired_tg_id is not None and str(repaired_tg_id).isdigit() and int(repaired_tg_id) > 0:
+            effective_user_id = int(repaired_tg_id)
+    except Exception:
+        pass
     
     # Проверяем, есть ли email в конфиге
     if user_email not in config.USERS_ADDITIONAL_INFO:
@@ -996,7 +1006,7 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                     
                     # Отправляем фото пользователю
                     msg_photo = await bot.send_photo(
-                        int(user_id),
+                        int(effective_user_id),
                         photo=BufferedInputFile(image_bytes, filename="image.jpg"),
                         caption=caption,
                         reply_markup=keyboard.tracker_keyboard_2()
@@ -1004,7 +1014,7 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                     
                     # Сохраняем и рассылаем только после успешной доставки пользователю
                     tracker_message_id = db.add_to_trackers_messages(
-                        user_id,
+                        effective_user_id,
                         tracker_chat_id,
                         text,
                         None,
@@ -1038,9 +1048,9 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
             # Если есть текст и нет картинки - отправляем текстовое сообщение
             if text and not image_base64:
                 try:
-                    await bot.send_message(int(user_id), text, reply_markup=keyboard.tracker_keyboard_2())
+                    await bot.send_message(int(effective_user_id), text, reply_markup=keyboard.tracker_keyboard_2())
                     tracker_message_id = db.add_to_trackers_messages(
-                        user_id,
+                        effective_user_id,
                         tracker_chat_id,
                         text,
                         None,
@@ -1059,7 +1069,10 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                     }
                     await broadcast_to_user_ws_connections(config.ws_connections, user_id, message_payload)
                 except Exception as e:
-                    print(f"[WS tracker_to_user] delivery failed user_id={user_id}: {e}")
+                    print(
+                        f"[WS tracker_to_user] delivery failed user_id={user_id}, "
+                        f"effective_user_id={effective_user_id}: {e}"
+                    )
                     await websocket.send_json({
                         "type": "error",
                         "message": "Не удалось доставить сообщение ученику."
