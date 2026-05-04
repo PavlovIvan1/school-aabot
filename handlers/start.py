@@ -2162,7 +2162,7 @@ async def tracker_list_command(message: types.Message):
     return
 
 
-@start_router.message(F.text.startswith('/flapper'))
+@start_router.message(F.text.regexp(r'^/flapper(\s|$)'))
 async def flapper(message: types.Message):
     if message.from_user.id not in config.ADMINS_LIST:
         return
