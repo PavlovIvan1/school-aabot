@@ -2210,7 +2210,47 @@ async def flapper(message: types.Message):
     if lesson_data is None:
         return await message.answer('Урок не найден')
 
-    await send_congratulation_message(message, int(lesson_id), user_id)
+    # Для ручной команды администратора принудительно отправляем хлопушку,
+    # даже если урок не входит в обязательные или не обновлён статус ДЗ в БД.
+    count_required_homework = 0
+    done_homework_ids = db.get_done_homework_ids(user_id)
+    required_homework = db.get_required_homework_ids(users_flow)
+    ignore_lessons = []
+
+    for i in done_homework_ids:
+        if i in required_homework and i not in ignore_lessons:
+            count_required_homework += 1
+            if "analog" in required_homework[i]:
+                ignore_lessons += required_homework[i]["analog"]
+
+    clap_number = max(1, count_required_homework + 1)
+    count_claps = 15
+    claps_path = 'files/'
+
+    if float(users_flow) >= 15.1 and float(users_flow) < 15.6:
+        count_claps = 12
+        claps_path = 'files/15_1/'
+    elif float(users_flow) >= 15.6 and float(users_flow) < 15.8:
+        count_claps = 11
+        claps_path = 'files/15_6/'
+    elif float(users_flow) >= 15.8 and float(users_flow) < 16:
+        count_claps = 10
+        claps_path = 'files/15_8/'
+
+    clap_number = min(clap_number, count_claps)
+
+    await message.bot.send_photo(
+        int(user_id),
+        photo=FSInputFile(f'{claps_path}{clap_number}.jpg'),
+        caption=f'Хлопушка {clap_number}/{count_claps} 🎬',
+        parse_mode='HTML'
+    )
+
+    # Если это последняя хлопушка — сразу отправляем бонус.
+    if clap_number >= count_claps:
+        await asyncio.sleep(0.5)
+        await message.bot.send_document(int(user_id), FSInputFile('files/Тренды в контенте 2026.pdf'))
+
     await message.answer("Хлопушка успешно отправлена!")
 
 
