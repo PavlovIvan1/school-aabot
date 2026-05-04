@@ -2168,11 +2168,11 @@ async def flapper(message: types.Message):
         return
     elif len(message.text.split()) != 3:
         return await message.answer('Неправильная команда. Отправьте: /flapper TG_ID ID_урока или /flapper @username ID_урока или /flapper email@example.com ID_урока')
-    
+
     user_param = message.text.split()[1]
     lesson_id = message.text.split()[2]
     user_data = []
-    
+
     # Если передан @username, пробуем получить ID через Telegram API
     if user_param.startswith('@'):
         try:
@@ -2193,7 +2193,7 @@ async def flapper(message: types.Message):
         user_id = str(tg_id)
     else:
         user_id = user_param
-    
+
     if len(user_data) == 0:
         user_data = db.get_user(user_id)
 
@@ -2212,6 +2212,58 @@ async def flapper(message: types.Message):
 
     await send_congratulation_message(message, int(lesson_id), user_id)
     await message.answer("Хлопушка успешно отправлена!")
+
+
+@start_router.message(F.text.startswith('/flapperall'))
+async def flapper_all(message: types.Message):
+    if message.from_user.id not in config.ADMINS_LIST:
+        return
+
+    parts = message.text.split()
+    if len(parts) != 2:
+        return await message.answer('Неправильная команда. Отправьте: /flapperall email@example.com')
+
+    email = parts[1].lower().strip()
+    if '@' not in email:
+        return await message.answer('Для /flapperall нужно указать email ученика: /flapperall email@example.com')
+
+    user_data = db.get_user_by_email(email)
+    if len(user_data) == 0:
+        return await message.answer('Пользователь не найден в базе данных')
+
+    tg_id = user_data[0].get('tg_id')
+    if tg_id is None or not str(tg_id).isdigit() or int(tg_id) == 0:
+        return await message.answer('У пользователя в базе не указан Telegram ID. Попросите пользователя написать боту /start, затем повторите команду.')
+
+    try:
+        users_flow = db.get_flow_by_email(user_data[0]['email'])
+    except Exception:
+        return await message.answer('Для пользователя не найден поток обучения (users_access).')
+
+    count_claps = 15
+    claps_path = 'files/'
+
+    if float(users_flow) >= 15.1 and float(users_flow) < 15.6:
+        count_claps = 12
+        claps_path = 'files/15_1/'
+    elif float(users_flow) >= 15.6 and float(users_flow) < 15.8:
+        count_claps = 11
+        claps_path = 'files/15_6/'
+    elif float(users_flow) >= 15.8 and float(users_flow) < 16:
+        count_claps = 10
+        claps_path = 'files/15_8/'
+
+    user_id = int(tg_id)
+
+    for clap_number in range(1, count_claps + 1):
+        await message.bot.send_photo(
+            user_id,
+            photo=FSInputFile(f'{claps_path}{clap_number}.jpg'),
+            caption=f'Хлопушка {clap_number}/{count_claps} 🎬',
+            parse_mode='HTML'
+        )
+
+    await message.answer(f'Отправлено все хлопушки пользователю {email}: {count_claps} шт.')
 
 
 @start_router.message(F.text.startswith('/fixuser'))
