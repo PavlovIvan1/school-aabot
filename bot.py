@@ -516,6 +516,19 @@ async def handle_alice_request(request: Request):
         if user_id_int == 0:
             return HTMLResponse(content="<html><body><h1>У ученика нет Telegram аккаунта. Попросите ученика написать боту /start</h1></body></html>", status_code=400)
 
+        # Если в ссылке есть email, пробуем определить актуальный tg_id именно по email,
+        # чтобы не открывать чат по устаревшему user_id из старой ссылки.
+        if email_param:
+            try:
+                email_repair = db.repair_user_tg_id_by_email(email_param)
+            except Exception:
+                email_repair = {}
+
+            repaired_tg_id = email_repair.get("tg_id") if isinstance(email_repair, dict) else None
+            if repaired_tg_id is not None and str(repaired_tg_id).lstrip('-').isdigit() and int(repaired_tg_id) > 0:
+                user_id_int = int(repaired_tg_id)
+                user_id = str(user_id_int)
+
         tracker_messages_list = db.get_trackers_messages_by_tg_id(user_id_int)
         # Защита от «вечной загрузки» страницы на длинных диалогах:
         # рендерим только хвост переписки, полный архив остаётся в БД.
@@ -533,12 +546,14 @@ async def handle_alice_request(request: Request):
                 except Exception:
                     pass
 
-        # Авто-ремонт: если запись уже есть, но tg_id у email разъехался,
-        # принудительно синхронизируем email -> текущий user_id из ссылки.
+        # Авто-ремонт: если запись уже есть и мы открыли чат по user_id без email-фолбэка,
+        # мягко синхронизируем email -> текущий user_id.
+        # ВАЖНО: при наличии email в ссылке не перетираем tg_id значением из URL,
+        # т.к. URL может быть устаревшим.
         if len(user_data) != 0:
             try:
                 user_email = (user_data[0].get("email") or "").lower().strip()
-                if user_email:
+                if user_email and not email_param:
                     db.update_user_tg_id(user_email, user_id_int)
                     user_data = db.get_user(user_id_int)
             except Exception:
@@ -776,12 +791,6 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
 
     tracker_chat_id = tracker_chat_candidates[0]
 
-    delivery_target_ids = []
-    if effective_user_id > 0:
-        delivery_target_ids.append(int(effective_user_id))
-    if str(user_id).lstrip("-").isdigit() and int(user_id) > 0 and int(user_id) not in delivery_target_ids:
-        delivery_target_ids.append(int(user_id))
-
     try:
         while True:
             data = await websocket.receive_json()
@@ -986,6 +995,12 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
         })
         await websocket.close()
         return
+
+    delivery_target_ids = []
+    if effective_user_id > 0:
+        delivery_target_ids.append(int(effective_user_id))
+    if str(user_id).lstrip("-").isdigit() and int(user_id) > 0 and int(user_id) not in delivery_target_ids:
+        delivery_target_ids.append(int(user_id))
 
     try:
         while True:
