@@ -517,6 +517,10 @@ async def handle_alice_request(request: Request):
             return HTMLResponse(content="<html><body><h1>У ученика нет Telegram аккаунта. Попросите ученика написать боту /start</h1></body></html>", status_code=400)
 
         tracker_messages_list = db.get_trackers_messages_by_tg_id(user_id_int)
+        # Защита от «вечной загрузки» страницы на длинных диалогах:
+        # рендерим только хвост переписки, полный архив остаётся в БД.
+        if len(tracker_messages_list) > 200:
+            tracker_messages_list = tracker_messages_list[-200:]
         user_data = db.get_user(user_id_int)
 
         if len(user_data) == 0:
@@ -772,6 +776,12 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
 
     tracker_chat_id = tracker_chat_candidates[0]
 
+    delivery_target_ids = []
+    if effective_user_id > 0:
+        delivery_target_ids.append(int(effective_user_id))
+    if str(user_id).lstrip("-").isdigit() and int(user_id) > 0 and int(user_id) not in delivery_target_ids:
+        delivery_target_ids.append(int(user_id))
+
     try:
         while True:
             data = await websocket.receive_json()
@@ -1005,16 +1015,28 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
                     caption = text if text else None
                     
                     # Отправляем фото пользователю
-                    msg_photo = await bot.send_photo(
-                        int(effective_user_id),
-                        photo=BufferedInputFile(image_bytes, filename="image.jpg"),
-                        caption=caption,
-                        reply_markup=keyboard.tracker_keyboard_2()
-                    )
+                    msg_photo = None
+                    delivery_error = None
+                    delivered_user_id = None
+                    for candidate_user_id in delivery_target_ids:
+                        try:
+                            msg_photo = await bot.send_photo(
+                                int(candidate_user_id),
+                                photo=BufferedInputFile(image_bytes, filename="image.jpg"),
+                                caption=caption,
+                                reply_markup=keyboard.tracker_keyboard_2()
+                            )
+                            delivered_user_id = int(candidate_user_id)
+                            break
+                        except Exception as e:
+                            delivery_error = e
+
+                    if msg_photo is None:
+                        raise delivery_error if delivery_error is not None else RuntimeError("photo delivery failed")
                     
                     # Сохраняем и рассылаем только после успешной доставки пользователю
                     tracker_message_id = db.add_to_trackers_messages(
-                        effective_user_id,
+                        delivered_user_id,
                         tracker_chat_id,
                         text,
                         None,
@@ -1048,9 +1070,21 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
             # Если есть текст и нет картинки - отправляем текстовое сообщение
             if text and not image_base64:
                 try:
-                    await bot.send_message(int(effective_user_id), text, reply_markup=keyboard.tracker_keyboard_2())
+                    delivered_user_id = None
+                    delivery_error = None
+                    for candidate_user_id in delivery_target_ids:
+                        try:
+                            await bot.send_message(int(candidate_user_id), text, reply_markup=keyboard.tracker_keyboard_2())
+                            delivered_user_id = int(candidate_user_id)
+                            break
+                        except Exception as e:
+                            delivery_error = e
+
+                    if delivered_user_id is None:
+                        raise delivery_error if delivery_error is not None else RuntimeError("text delivery failed")
+
                     tracker_message_id = db.add_to_trackers_messages(
-                        effective_user_id,
+                        delivered_user_id,
                         tracker_chat_id,
                         text,
                         None,
