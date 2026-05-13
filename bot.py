@@ -99,6 +99,41 @@ def parse_sheet_date_to_ts(raw_value) -> int:
     return 0
 
 
+def parse_delete_date_to_ts(raw_value) -> int:
+    """Преобразует дату удаления из users-таблицы в unix timestamp.
+
+    Поддерживает форматы:
+    - dd.mm.YYYY
+    - dd.mm.yy
+    - dd.mm (с подстановкой текущего года)
+    """
+    if raw_value is None:
+        return 0
+
+    value = str(raw_value).strip()
+    if len(value) == 0:
+        return 0
+
+    for fmt in ("%d.%m.%Y", "%d.%m.%y"):
+        try:
+            return int(datetime.datetime.strptime(value, fmt).timestamp())
+        except Exception:
+            continue
+
+    # Фолбэк для дат без года, например "29.11"
+    m = re.fullmatch(r"(\d{1,2})\.(\d{1,2})", value)
+    if m:
+        day = int(m.group(1))
+        month = int(m.group(2))
+        year = datetime.date.today().year
+        try:
+            return int(datetime.datetime(year, month, day).timestamp())
+        except Exception:
+            return 0
+
+    return 0
+
+
 def build_users_additional_info(rows) -> Dict[str, Dict[str, Any]]:
     """Собирает users additional info из строк листа users с защитой от дублей.
 
@@ -2582,9 +2617,14 @@ async def check_info():
 
                     row_data = {'mail': clean_string(row[0].lower().strip()), 'chat_id': chat_id_value, 'flow': row[2]}
 
-                    if len(row[3]) != 0: # Есть ли дата удаления
+                    delete_date_raw = row[3] if len(row) > 3 else ""
+                    if len(delete_date_raw) != 0: # Есть ли дата удаления
                         try:
-                            delete_time = int(datetime.datetime.strptime(row[3], "%d.%m.%Y").timestamp())
+                            delete_time = parse_delete_date_to_ts(delete_date_raw)
+
+                            if delete_time == 0:
+                                # Тихо пропускаем невалидные значения, чтобы не заспамливать логи.
+                                continue
 
                             if delete_time < time.time():
                                 users_list = db.get_user_by_email(row_data['mail'])
@@ -2597,7 +2637,7 @@ async def check_info():
                                 deleted_by_time.append(row_data['mail'])
                                 await table_2.delete_rows(table_2_data.index(row) + 2 - len(deleted_by_time))
                         except Exception as e:
-                            print(f"Ошибка при проверке даты: {e}")
+                            print(f"Ошибка при проверке даты удаления '{delete_date_raw}': {e}")
                     else:
                         try:
                             await table_2.batch_update([{'range': f'D{table_2_data.index(row) + 1 - len(deleted_by_time)}:D{table_2_data.index(row) + 1 - len(deleted_by_time)}', 'values': [[f"=ARRAYFORMULA(ПРОСМОТРX(C{table_2_data.index(row) + 1 - len(deleted_by_time)}; 'Даты удаления потоков'!A:A; 'Даты удаления потоков'!B:B; ""))"]]}], value_input_option='USER_ENTERED')
