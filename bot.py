@@ -259,6 +259,37 @@ def parse_chat_id_value(raw_value):
 
     return None
 
+
+def resolve_effective_user_id(raw_user_id: str, raw_email: str = "") -> Optional[int]:
+    """Надёжно определяет актуальный tg_id пользователя.
+
+    Источники (по приоритету):
+    1) repair_user_tg_id_by_email(email) — единая точка анти-рассинхрона
+    2) валидный user_id из URL
+    """
+    user_id = (raw_user_id or "").strip()
+    email = clean_string(raw_email or "")
+
+    user_id_int = None
+    if user_id and user_id.lstrip("-").isdigit():
+        parsed = int(user_id)
+        if parsed > 0:
+            user_id_int = parsed
+
+    # Если есть email — всегда даём ему приоритет, т.к. URL часто устаревает
+    # (ссылки из старых уведомлений/дашбордов).
+    if email:
+        try:
+            repair_result = db.repair_user_tg_id_by_email(email)
+        except Exception:
+            repair_result = {}
+
+        repaired_tg_id = repair_result.get("tg_id") if isinstance(repair_result, dict) else None
+        if repaired_tg_id is not None and str(repaired_tg_id).lstrip("-").isdigit() and int(repaired_tg_id) > 0:
+            return int(repaired_tg_id)
+
+    return user_id_int
+
 app = FastAPI()
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -526,43 +557,15 @@ async def handle_alice_request(request: Request):
         user_id = (request.query_params.get("user_id", "") or "").strip()
         email_param = (request.query_params.get("email", "") or "").strip().lower()
 
-        user_id_int = None
-        if user_id:
-            try:
-                user_id_int = int(user_id)
-            except ValueError:
-                user_id_int = None
-
-        # Фолбэк: если user_id отсутствует/невалидный/нулевой — пробуем восстановить по email
-        if (user_id_int is None or user_id_int == 0) and email_param:
-            try:
-                repair_result = db.repair_user_tg_id_by_email(email_param)
-            except Exception:
-                repair_result = {}
-
-            repaired_tg_id = repair_result.get("tg_id") if isinstance(repair_result, dict) else None
-            if repaired_tg_id is not None and str(repaired_tg_id).lstrip('-').isdigit() and int(repaired_tg_id) != 0:
-                user_id_int = int(repaired_tg_id)
-                user_id = str(user_id_int)
+        user_id_int = resolve_effective_user_id(user_id, email_param)
+        if user_id_int is not None:
+            user_id = str(user_id_int)
 
         if user_id_int is None:
             return HTMLResponse(content="<html><body><h1>Неверный ID пользователя</h1></body></html>", status_code=400)
 
         if user_id_int == 0:
             return HTMLResponse(content="<html><body><h1>У ученика нет Telegram аккаунта. Попросите ученика написать боту /start</h1></body></html>", status_code=400)
-
-        # Если в ссылке есть email, пробуем определить актуальный tg_id именно по email,
-        # чтобы не открывать чат по устаревшему user_id из старой ссылки.
-        if email_param:
-            try:
-                email_repair = db.repair_user_tg_id_by_email(email_param)
-            except Exception:
-                email_repair = {}
-
-            repaired_tg_id = email_repair.get("tg_id") if isinstance(email_repair, dict) else None
-            if repaired_tg_id is not None and str(repaired_tg_id).lstrip('-').isdigit() and int(repaired_tg_id) > 0:
-                user_id_int = int(repaired_tg_id)
-                user_id = str(user_id_int)
 
         tracker_messages_list = db.get_trackers_messages_by_tg_id(user_id_int)
         # Защита от «вечной загрузки» страницы на длинных диалогах:
@@ -962,17 +965,26 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
     else:
         config.ws_connections[user_id].append(websocket)
 
-    user_data = db.get_user(int(user_id))
-    effective_user_id = int(user_id)
+    raw_user_id = (user_id or "").strip()
+    if not raw_user_id.lstrip("-").isdigit() or int(raw_user_id) <= 0:
+        await websocket.send_json({
+            "type": "error",
+            "message": "Неверный ID пользователя"
+        })
+        await websocket.close()
+        return
+
+    user_data = db.get_user(int(raw_user_id))
+    effective_user_id = int(raw_user_id)
     
     # Проверяем, есть ли пользователь в базе
     if len(user_data) == 0:
         # Фолбэк: пытаемся восстановить пользователя через link_access
-        link_access_rows = db.get_link_access_by_user_id(str(user_id))
+        link_access_rows = db.get_link_access_by_user_id(str(raw_user_id))
         if len(link_access_rows) != 0 and link_access_rows[0].get("email"):
             try:
-                db.add_user(int(user_id), link_access_rows[0]["email"].lower())
-                user_data = db.get_user(int(user_id))
+                db.add_user(int(raw_user_id), link_access_rows[0]["email"].lower())
+                user_data = db.get_user(int(raw_user_id))
             except Exception:
                 pass
 
@@ -987,14 +999,11 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
     load_users_additional_info()
     user_email = clean_string(user_data[0]["email"] or "")
 
-    # Доп. синхронизация: если tg_id у email разъехался, берём актуальный id.
-    try:
-        repair_result = db.repair_user_tg_id_by_email(user_email)
-        repaired_tg_id = repair_result.get("tg_id") if isinstance(repair_result, dict) else None
-        if repaired_tg_id is not None and str(repaired_tg_id).isdigit() and int(repaired_tg_id) > 0:
-            effective_user_id = int(repaired_tg_id)
-    except Exception:
-        pass
+    # Единый резолв id (как в /get_tracker_chat): убираем расхождение
+    # между URL и фактическим tg_id пользователя.
+    resolved_user_id = resolve_effective_user_id(str(raw_user_id), user_email)
+    if resolved_user_id is not None and resolved_user_id > 0:
+        effective_user_id = int(resolved_user_id)
     
     # Проверяем, есть ли email в конфиге
     if user_email not in config.USERS_ADDITIONAL_INFO:
@@ -1034,8 +1043,8 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
     delivery_target_ids = []
     if effective_user_id > 0:
         delivery_target_ids.append(int(effective_user_id))
-    if str(user_id).lstrip("-").isdigit() and int(user_id) > 0 and int(user_id) not in delivery_target_ids:
-        delivery_target_ids.append(int(user_id))
+    if int(raw_user_id) > 0 and int(raw_user_id) not in delivery_target_ids:
+        delivery_target_ids.append(int(raw_user_id))
 
     try:
         while True:

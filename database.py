@@ -704,6 +704,46 @@ class MySQL:
         self.cursor.execute("SELECT * FROM trackers_messages WHERE tg_id = %s AND (is_deleted IS NULL OR is_deleted = FALSE) ORDER BY message_id ASC", (tg_id,))
         return self.cursor.fetchall()
 
+    def get_latest_tracker_message_tg_id_by_email(self, email: str):
+        """Возвращает последний tg_id из истории диалога трекера для email.
+
+        Нужен как сильный fallback при рассинхроне users/link_access,
+        когда в URL пришёл устаревший user_id.
+        """
+        normalized_email = self._normalize_email_value(email)
+        if not normalized_email:
+            return None
+
+        self.cursor.execute(
+            """
+            SELECT tm.tg_id
+            FROM trackers_messages tm
+            JOIN users u ON u.tg_id = tm.tg_id
+            WHERE u.email IS NOT NULL
+              AND u.email != ''
+              AND tm.tg_id IS NOT NULL
+              AND tm.tg_id != 0
+              AND (tm.is_deleted IS NULL OR tm.is_deleted = FALSE)
+            ORDER BY tm.message_id DESC
+            """
+        )
+        rows = self.cursor.fetchall()
+
+        for row in rows:
+            tg_id = row.get("tg_id")
+            if tg_id is None or not str(tg_id).lstrip("-").isdigit() or int(tg_id) <= 0:
+                continue
+
+            users_rows = self.get_user(int(tg_id))
+            if len(users_rows) == 0:
+                continue
+
+            row_email = str(users_rows[0].get("email") or "")
+            if self._normalize_email_value(row_email) == normalized_email:
+                return int(tg_id)
+
+        return None
+
     def get_tracker_message_by_id(self, message_id: int):
         self.cursor.execute("SELECT * FROM trackers_messages WHERE message_id = %s", (message_id,))
         return self.cursor.fetchone()
@@ -826,11 +866,22 @@ class MySQL:
             if user_id is not None and str(user_id).lstrip("-").isdigit() and int(user_id) > 0:
                 valid_link_ids.append(int(user_id))
 
+        valid_message_ids = []
+        latest_message_tg_id = self.get_latest_tracker_message_tg_id_by_email(normalized_email)
+        if latest_message_tg_id is not None and int(latest_message_tg_id) > 0:
+            valid_message_ids.append(int(latest_message_tg_id))
+
         chosen_tg_id = None
-        if len(valid_user_ids) != 0:
-            chosen_tg_id = valid_user_ids[0]
+        # Приоритет источников:
+        # 1) Последний tg_id из истории трекер-диалога (самый «боевой» и свежий)
+        # 2) Последний tg_id из link_access (новые интеграционные записи)
+        # 3) users.tg_id (legacy, может быть устаревшим)
+        if len(valid_message_ids) != 0:
+            chosen_tg_id = valid_message_ids[0]
         elif len(valid_link_ids) != 0:
             chosen_tg_id = valid_link_ids[-1]
+        elif len(valid_user_ids) != 0:
+            chosen_tg_id = valid_user_ids[0]
 
         canonical_email = ""
         if len(users_rows) != 0:
