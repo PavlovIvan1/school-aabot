@@ -38,6 +38,7 @@ AUTHORIZED_BROADCAST_USER_ID = 5201430878
 BROADCAST_BATCH_SIZE = 500
 BROADCAST_DELAY_SECONDS = 60
 BROADCAST_TASK = None
+# Потоки >= порога: без кнопки «Задания к урокам» и без сдачи ДЗ в боте.
 HIDE_LEARNING_BUTTONS_FROM_FLOW = "15.10"
 AUTH_EMAIL_WHITELIST = {
     "bashvinova18@mail.ru",
@@ -140,6 +141,53 @@ def load_sheets_data_from_file() -> None:
                 config.SHEETS_DATA = data
     except Exception:
         pass
+
+
+def _parse_chat_id_to_int(raw) -> Optional[int]:
+    if raw is None:
+        return None
+    value = str(raw).strip()
+    if len(value) == 0 or not value.lstrip("-").isdigit():
+        return None
+    return int(value)
+
+
+def get_homework_grader_chat_ids() -> List[int]:
+    """Чаты, где трекер проверяет ДЗ (коммуникация + отдельные чаты ДЗ)."""
+    chat_ids: set[int] = set()
+
+    for raw_id in db.get_chat_ids():
+        parsed = _parse_chat_id_to_int(raw_id)
+        if parsed is not None:
+            chat_ids.add(parsed)
+
+    for raw_id in db.get_distinct_homework_chat_ids():
+        parsed = _parse_chat_id_to_int(raw_id)
+        if parsed is not None:
+            chat_ids.add(parsed)
+
+    load_users_additional_info_from_file()
+    for info in config.USERS_ADDITIONAL_INFO.values():
+        if not isinstance(info, dict):
+            continue
+        for key in ("homework_chat_id", "tracker_chat_id"):
+            parsed = _parse_chat_id_to_int(info.get(key))
+            if parsed is not None:
+                chat_ids.add(parsed)
+
+    tracker_to_homework = getattr(config, "TRACKER_TO_HOMEWORK_CHAT_MAP", {})
+    if isinstance(tracker_to_homework, dict):
+        for raw_id in tracker_to_homework.values():
+            parsed = _parse_chat_id_to_int(raw_id)
+            if parsed is not None:
+                chat_ids.add(parsed)
+
+    for raw_id in getattr(config, "MANUAL_TRACKER_CHAT_IDS", []):
+        parsed = _parse_chat_id_to_int(raw_id)
+        if parsed is not None:
+            chat_ids.add(parsed)
+
+    return list(chat_ids)
 
 
 def get_sync_creds():
@@ -1814,10 +1862,7 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
     homework_data = db.get_homework_by_lesson_id(message.from_user.id, state_data["lesson_id"])
 
     if len(homework_data) != 0 and homework_data[0]['status'] == '✅':
-        try:
-            await message.delete()
-        except:
-            pass
+        await message.answer('Это задание уже принято. Если нужно отправить новую версию, дождитесь доработки от трекера.')
         return
 
     try:
@@ -2004,7 +2049,8 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
 
     await message.answer('Твое задание отправлено трекеру на проверку✅\nОбратная связь поступит в этот бот в течении 2-х дней', reply_markup=reply_markup)
 
-    db.add_homework_text(message.from_user.id, state_data["lesson_id"], time.time(), message.text)
+    if message.text:
+        db.add_homework_text(message.from_user.id, state_data["lesson_id"], time.time(), message.text)
 
     await state.clear()
 
@@ -2491,7 +2537,7 @@ async def fix_tracker_user_by_email(message: types.Message):
 async def message_reaction_handler(message_reaction: types.MessageReactionUpdated) -> Any:
     support_chats_list = db.get_support_chats()
     support_chat_ids = [int(support_chat["support_chat_id"]) for support_chat in support_chats_list]
-    chat_ids_list = db.get_chat_ids()
+    chat_ids_list = get_homework_grader_chat_ids()
 
     if message_reaction.chat.id in support_chat_ids or message_reaction.chat.id == config.PSYHOLOGIST_CHAT_ID or message_reaction.chat.id in chat_ids_list:
         return
@@ -2517,7 +2563,7 @@ async def message_reaction_handler(message_reaction: types.MessageReactionUpdate
 async def command_start_handler(message: Message) -> None:
     support_chats_list = db.get_support_chats()
     support_chat_ids = [int(support_chat["support_chat_id"]) for support_chat in support_chats_list]
-    chat_ids_list = db.get_chat_ids()
+    chat_ids_list = get_homework_grader_chat_ids()
     trackers_chats = db.get_trackers_chats()
 
     # Обработка системы метрик
@@ -2735,7 +2781,9 @@ async def command_start_handler(message: Message) -> None:
     
     if message.reply_to_message.text.__contains__('(Техническая информация:'):
         technical_info = message.reply_to_message.text.split("Техническая информация: ")[-1].split(")")[0].split("_")
-        homework_data = db.get_homework_by_lesson_id(technical_info[0], technical_info[1])
+        if len(technical_info) < 2 or not str(technical_info[0]).isdigit():
+            return
+        homework_data = db.get_homework_by_lesson_id(int(technical_info[0]), technical_info[1])
         print(f"Использую новый алгоритм: {technical_info}")
     else:
         return

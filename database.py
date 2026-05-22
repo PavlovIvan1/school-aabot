@@ -555,6 +555,12 @@ class MySQL:
     def get_chat_ids(self):
         self.cursor.execute("SELECT DISTINCT chat_id FROM users_access")
         return [i["chat_id"] for i in self.cursor.fetchall()]
+
+    def get_distinct_homework_chat_ids(self):
+        self.cursor.execute(
+            "SELECT DISTINCT chat_id FROM homework WHERE chat_id IS NOT NULL AND chat_id != 0"
+        )
+        return [row["chat_id"] for row in self.cursor.fetchall()]
     
     def get_all_user_access_data(self):
         self.cursor.execute("SELECT * FROM users_access")
