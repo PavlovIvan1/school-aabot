@@ -167,64 +167,16 @@ def support_options_keyboard() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def call_time_keyboard(available_options=None) -> InlineKeyboardMarkup:
-    """Клавиатура выбора времени звонка"""
+SUPPORT_CALL_FORM_URL = "https://forms.amocrm.ru/rzlwvrl"
+
+
+def support_call_booking_keyboard() -> InlineKeyboardMarkup:
+    """Запись на звонок через внешнюю форму amoCRM."""
     builder = InlineKeyboardBuilder()
-
-    if available_options is None:
-        available_options = ["11", "13", "16", "asap"]
-
-    if "11" in available_options:
-        builder.row(InlineKeyboardButton(text="11:00", callback_data="call_time:11"))
-    if "13" in available_options:
-        builder.row(InlineKeyboardButton(text="13:00", callback_data="call_time:13"))
-    if "16" in available_options:
-        builder.row(InlineKeyboardButton(text="16:00", callback_data="call_time:16"))
-    if "asap" in available_options:
-        builder.row(InlineKeyboardButton(text="Как можно скорее", callback_data="call_time:asap"))
-
+    builder.row(InlineKeyboardButton(text="Записаться", url=SUPPORT_CALL_FORM_URL))
     builder.row(InlineKeyboardButton(text="🔙 Назад", callback_data="get_support:menu"))
-
     return builder.as_markup()
 
-
-def call_date_keyboard(available_dates=None) -> InlineKeyboardMarkup:
-    """Клавиатура выбора даты звонка (на 10 дней вперёд)"""
-    import datetime
-    
-    builder = InlineKeyboardBuilder()
-    
-    # Текущая дата в Москве
-    now_utc = datetime.datetime.utcnow()
-    moscow_time = now_utc + datetime.timedelta(hours=3)
-    
-    # Генерируем даты на 10 дней вперёд
-    dates = []
-    for i in range(10):
-        next_date = moscow_time + datetime.timedelta(days=i)
-        if available_dates is None or next_date.strftime('%Y-%m-%d') in available_dates:
-            dates.append(next_date)
-    
-    # Создаём кнопки по 5 в ряд
-    row = []
-    for date in dates:
-        day = date.day
-        month_names = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
-        month = month_names[date.month - 1]
-        btn_text = f"{day} {month}"
-        row.append(InlineKeyboardButton(text=btn_text, callback_data=f"call_date:{date.strftime('%Y-%m-%d')}"))
-        
-        if len(row) == 5:
-            builder.row(*row)
-            row = []
-    
-    # Добавляем оставшиеся кнопки
-    if row:
-        builder.row(*row)
-    
-    builder.row(InlineKeyboardButton(text="🔙 Назад", callback_data="get_support:menu"))
-
-    return builder.as_markup()
 
 def tracker_keyboard(web_app_user_id=None) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
