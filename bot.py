@@ -290,6 +290,130 @@ def resolve_effective_user_id(raw_user_id: str, raw_email: str = "") -> Optional
 
     return user_id_int
 
+
+async def _parse_getcourse_add_params(request: Request) -> dict[str, str]:
+    """Параметры из query (curl/GetCourse URL), JSON или form."""
+    email = (request.query_params.get("email") or "").strip()
+    flow = (request.query_params.get("flow") or "").strip()
+    user_id = (request.query_params.get("user_id") or "").strip()
+    tarif = (request.query_params.get("tarif") or "").strip()
+
+    if email and flow and user_id:
+        return {"email": email, "flow": flow, "user_id": user_id, "tarif": tarif}
+
+    body: dict = {}
+    try:
+        parsed = await request.json()
+        if isinstance(parsed, dict):
+            body = parsed
+    except Exception:
+        body = {}
+
+    if not body:
+        try:
+            form = await request.form()
+            body = {k: form.get(k) for k in form.keys()}
+        except Exception:
+            body = {}
+
+    if isinstance(body.get("user"), dict):
+        user_obj = body["user"]
+        email = email or (user_obj.get("email") or user_obj.get("user_email") or "")
+    if isinstance(body.get("deal"), dict):
+        deal_obj = body["deal"]
+        email = email or (deal_obj.get("user_email") or deal_obj.get("email") or "")
+
+    email = email or (body.get("email") or body.get("user_email") or "")
+    flow = flow or (body.get("flow") or body.get("stream") or body.get("group") or "")
+    user_id = user_id or str(body.get("user_id") or body.get("id") or "")
+    tarif = tarif or (body.get("tarif") or body.get("tariff") or "")
+
+    if isinstance(flow, list):
+        flow = flow[0] if flow else ""
+
+    return {
+        "email": str(email).strip(),
+        "flow": str(flow).strip(),
+        "user_id": str(user_id).strip(),
+        "tarif": str(tarif).strip(),
+    }
+
+
+async def _add_student_via_getcourse(
+    email: str,
+    flow: str,
+    user_id: str,
+    tarif: str = "",
+    source: str = "API GETCOURSE",
+) -> JSONResponse:
+    email_key = clean_string(email)
+    if not email_key or not flow or not user_id:
+        return JSONResponse(
+            content={
+                "success": False,
+                "error": "Missing required parameters",
+                "required": ["email", "flow", "user_id"],
+            },
+            status_code=400,
+        )
+
+    if db.find_users_access_email(email_key) or db.is_email_in_added_api_users(email_key):
+        return JSONResponse(content={"success": True, "message": "already_exists"})
+
+    support_chats = db.get_support_chats()
+    if support_chats:
+        import random
+
+        communication_chat_id = random.choice(support_chats)["support_chat_id"]
+    else:
+        communication_chat_id = ""
+
+    try:
+        agc = await agcm.authorize()
+        ss_2 = await agc.open_by_url(config.SPREADSHEET_URL_USERS)
+        table = await ss_2.get_worksheet_by_id(0)
+        await table.append_row(
+            [
+                email_key,
+                -1002572458943,
+                flow,
+                communication_chat_id,
+                -1003545567896,
+                tarif,
+            ],
+            value_input_option="USER_ENTERED",
+        )
+    except Exception as e:
+        logging.exception("GetCourse add to sheet failed for %s: %s", email_key, e)
+        try:
+            await bot.send_message(
+                config.LOG_CHAT_ID,
+                f"@infinityqqqq Не могу добавить {email_key} ({source}): {e}",
+            )
+        except Exception:
+            pass
+        return JSONResponse(
+            content={"success": False, "error": str(e)},
+            status_code=500,
+        )
+
+    db.add_email_to_added_api_users(email_key)
+    try:
+        db.add_to_link_access(user_id, email_key, flow)
+    except Exception as e:
+        logging.warning("link_access insert for %s: %s", email_key, e)
+
+    try:
+        await bot.send_message(
+            config.LOG_CHAT_ID,
+            f"Добавлен {email_key}, данные: {flow}, {user_id} ({source})",
+        )
+    except Exception:
+        pass
+
+    return JSONResponse(content={"success": True})
+
+
 app = FastAPI()
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -301,59 +425,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.post("/add_data")
-async def handle_alice_request(request: Request):
-    email = (request.query_params.get("email", "") or "").strip()
-    flow = (request.query_params.get("flow", "") or "").strip()
-    user_id = (request.query_params.get("user_id", "") or "").strip()
-    tarif = (request.query_params.get("tarif", "") or "").strip()
-
-    # Внешние интеграции иногда присылают неполный query string.
-    # Раньше здесь бросался ValueError -> 500 в web-логах.
-    # Возвращаем контролируемый ответ без исключения.
-    if not email or not flow or not user_id:
-        return JSONResponse(
-            content={
-                "success": False,
-                "error": "Missing required parameters",
-                "required": ["email", "flow", "user_id"],
-            },
-            status_code=400,
-        )
-
-    is_email_in_users_access = db.is_email_in_users_access(email)
-    is_email_in_added_api_users = db.is_email_in_added_api_users(email)
-
-    if is_email_in_users_access or is_email_in_added_api_users:
-        return
-    
-    db.add_email_to_added_api_users(email)
-    db.add_to_link_access(user_id, email.lower().strip(), flow)
-    
-    # Выбираем случайный chat для коммуникации (поддержка)
-    support_chats = db.get_support_chats()
-    if support_chats:
-        import random
-        random_support = random.choice(support_chats)
-        communication_chat_id = random_support['support_chat_id']
-    else:
-        communication_chat_id = ""
-    
-    try:
-        agc = await agcm.authorize()
-        ss_2 = await agc.open_by_url(config.SPREADSHEET_URL_USERS)
-        table = await ss_2.get_worksheet_by_id(0)
-        await table.append_row([email.lower().strip(), -1002572458943, flow, communication_chat_id, -1003545567896, tarif], value_input_option="USER_ENTERED")
-
-        try:
-            await bot.send_message(config.LOG_CHAT_ID, f'Добавлен {email}, данные: {flow}, {user_id} (API GETCOURSE)')
-        except:
-            pass
-    except Exception as e:
-        try:
-            await bot.send_message(config.LOG_CHAT_ID, f'@infinityqqqq Не могу добавить {email} (API GETCOURSE): {e}')
-        except:
-            pass
+@app.api_route("/add_data", methods=["GET", "POST"])
+async def add_data_endpoint(request: Request):
+    params = await _parse_getcourse_add_params(request)
+    return await _add_student_via_getcourse(
+        params["email"],
+        params["flow"],
+        params["user_id"],
+        params["tarif"],
+        source="API GETCOURSE",
+    )
 
 # ============ GETCOURSE WEBHOOK ============
 @app.post("/webhook/getcourse")
@@ -390,61 +471,65 @@ async def getcourse_webhook(request: Request):
                     break
         
         if not email:
-            return {"success": false, "error": "Email not found"}
-        
-        # Проверяем, есть ли уже пользователь
-        is_email_in_users_access = db.is_email_in_users_access(email)
-        is_email_in_added_api_users = db.is_email_in_added_api_users(email)
-        
-        if is_email_in_users_access or is_email_in_added_api_users:
-            return {"success": true, "message": "User already exists"}
-        
-        # Определяем поток/группу
+            return {"success": False, "error": "Email not found"}
+
+        email_key = clean_string(email)
+        if db.find_users_access_email(email_key) or db.is_email_in_added_api_users(email_key):
+            return {"success": True, "message": "User already exists"}
+
         if not flow:
-            # Пробуем получить из group_name
-            group = data.get('group_name') or data.get('group')
+            group = data.get("group_name") or data.get("group")
             if isinstance(group, list):
                 flow = group[0] if group else None
             else:
                 flow = group
-        
-        # Добавляем пользователя
-        db.add_email_to_added_api_users(email)
-        
+
+        import random
+
+        support_chats = db.get_support_chats()
+        if support_chats:
+            communication_chat_id = random.choice(support_chats)["support_chat_id"]
+        else:
+            communication_chat_id = ""
+
         try:
             agc = await agcm.authorize()
             ss_2 = await agc.open_by_url(config.SPREADSHEET_URL_USERS)
             table = await ss_2.get_worksheet_by_id(0)
-            
-            # Определяем chat_id трекера (по умолчанию)
-            tracker_chat_id = -1002572458943
-            
-            # Выбираем случайный chat для коммуникации (поддержка)
-            import random
-            support_chats = db.get_support_chats()
-            if support_chats:
-                random_support = random.choice(support_chats)
-                communication_chat_id = random_support['support_chat_id']
-            else:
-                communication_chat_id = ""
-            
-            await table.append_row([email.lower().strip(), tracker_chat_id, flow or "", communication_chat_id, -1003545567896], value_input_option="USER_ENTERED")
-            
-            try:
-                await bot.send_message(config.LOG_CHAT_ID, f'Добавлен из webhook {email}, поток: {flow} (GetCourse Webhook)')
-            except:
-                pass
-                
+            await table.append_row(
+                [
+                    email_key,
+                    -1002572458943,
+                    flow or "",
+                    communication_chat_id,
+                    -1003545567896,
+                ],
+                value_input_option="USER_ENTERED",
+            )
         except Exception as e:
             try:
-                await bot.send_message(config.LOG_CHAT_ID, f'@infinityqqqq Не могу добавить {email} (GetCourse Webhook): {e}')
-            except:
+                await bot.send_message(
+                    config.LOG_CHAT_ID,
+                    f"@infinityqqqq Не могу добавить {email_key} (GetCourse Webhook): {e}",
+                )
+            except Exception:
                 pass
-        
-        return {"success": true}
+            return {"success": False, "error": str(e)}
+
+        db.add_email_to_added_api_users(email_key)
+
+        try:
+            await bot.send_message(
+                config.LOG_CHAT_ID,
+                f"Добавлен из webhook {email_key}, поток: {flow} (GetCourse Webhook)",
+            )
+        except Exception:
+            pass
+
+        return {"success": True}
     
     except Exception as e:
-        return {"success": false, "error": str(e)}
+        return {"success": False, "error": str(e)}
 
 """@app.get("/get_support_chat")
 async def handle_alice_request(request: Request):
@@ -2610,6 +2695,12 @@ async def check_info():
             if os.getenv("METRICS_ONLY", "0") != "1" and not config.TESTING_MODE:
                 # Обновление юзеров
                 db_data = db.get_all_user_access_data()
+                db_mails = {}
+                for user_row in db_data:
+                    mail_key = clean_string(user_row.get("mail") or "")
+                    if mail_key:
+                        db_mails[mail_key] = user_row
+
                 added_emails = []
                 deleted_by_time = [] # Удаленные почты по дате удаления
 
@@ -2654,22 +2745,36 @@ async def check_info():
                             print(f"Ошибка при обновлении: {e}")
                             print(traceback.format_exc())
 
-                    if row_data not in db_data and row_data['mail'] not in added_emails:
-                        is_user_in_db = db.is_email_in_users_access(row_data['mail'])
-
-                        if is_user_in_db:
-                            db.delete_email(row_data['mail'])
-
-                        db.insert_email(row_data['mail'], int(row_data['chat_id']), row_data['flow'])
-                        print(f'Добавлено: {row_data}', row_data['mail'] not in added_emails)
-
-                        if clean_string(row[0].lower().strip()) in added_emails:
+                    mail_key = row_data["mail"]
+                    if mail_key in db_mails:
+                        existing = db_mails[mail_key]
+                        existing_chat = parse_chat_id_value(existing.get("chat_id"))
+                        new_chat = parse_chat_id_value(row_data["chat_id"])
+                        existing_flow = str(existing.get("flow") or "").strip()
+                        new_flow = str(row_data.get("flow") or "").strip()
+                        if existing_chat != new_chat or existing_flow != new_flow:
                             try:
-                                await bot.send_message(config.LOG_CHAT_ID, f'@infinityqqqq Обнаружен дубль почты: {clean_string(row[0].lower().strip())}')
-                            except:
-                                pass
+                                db.update_users_access(
+                                    mail_key,
+                                    int(row_data["chat_id"]),
+                                    row_data["flow"],
+                                )
+                                db_mails[mail_key] = {
+                                    **existing,
+                                    "chat_id": row_data["chat_id"],
+                                    "flow": row_data["flow"],
+                                }
+                            except Exception as e:
+                                print(f"Ошибка update users_access для {mail_key}: {e}")
+                        continue
 
-                        added_emails.append(clean_string(row[0].lower().strip()))
+                    if mail_key in added_emails:
+                        continue
+
+                    db.insert_email(row_data["mail"], int(row_data["chat_id"]), row_data["flow"])
+                    db_mails[mail_key] = row_data
+                    print(f"Добавлено: {row_data}")
+                    added_emails.append(mail_key)
                 
                 if len(deleted_by_time) != 0:
                     try:

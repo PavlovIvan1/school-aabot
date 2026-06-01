@@ -635,10 +635,23 @@ class MySQL:
         self.database.commit()
 
     def is_email_in_added_api_users(self, email):
-        self.cursor.execute("SELECT * FROM added_api_users WHERE email = %s", (email,))
-        result = self.cursor.fetchall()
+        normalized = self._normalize_email_value(email)
+        if not normalized:
+            return False
 
-        return True if len(result) > 0 else False
+        self.cursor.execute("SELECT email FROM added_api_users")
+        for row in self.cursor.fetchall():
+            if self._normalize_email_value(row.get("email")) == normalized:
+                return True
+        return False
+
+    def update_users_access(self, email, chat_id, flow):
+        canonical = self.find_users_access_email(email) or email
+        self.cursor.execute(
+            "UPDATE users_access SET chat_id = %s, flow = %s WHERE mail = %s",
+            (chat_id, flow, canonical),
+        )
+        self.database.commit()
     
     def get_support_chats(self):
         return config.SHEETS_DATA["support_chats"]
