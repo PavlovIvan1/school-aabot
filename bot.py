@@ -397,6 +397,25 @@ async def _add_student_via_getcourse(
             status_code=500,
         )
 
+    tracker_chat_id = -1002572458943
+    if not db.find_users_access_email(email_key):
+        try:
+            db.insert_email(email_key, tracker_chat_id, flow)
+        except Exception as e:
+            logging.exception(
+                "users_access insert failed for %s (row already in sheet): %s",
+                email_key,
+                e,
+            )
+            try:
+                await bot.send_message(
+                    config.LOG_CHAT_ID,
+                    f"@infinityqqqq Строка в таблице есть, но users_access не обновилась "
+                    f"для {email_key}: {e}. Sync подтянет при следующем цикле.",
+                )
+            except Exception:
+                pass
+
     db.add_email_to_added_api_users(email_key)
     try:
         db.add_to_link_access(user_id, email_key, flow)
@@ -515,6 +534,16 @@ async def getcourse_webhook(request: Request):
             except Exception:
                 pass
             return {"success": False, "error": str(e)}
+
+        if not db.find_users_access_email(email_key):
+            try:
+                db.insert_email(email_key, -1002572458943, flow or "")
+            except Exception as e:
+                logging.exception(
+                    "users_access insert failed for %s (GetCourse webhook): %s",
+                    email_key,
+                    e,
+                )
 
         db.add_email_to_added_api_users(email_key)
 
