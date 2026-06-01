@@ -25,6 +25,12 @@ ENABLE_METRICS_WORKER=1 ./run_tmux_stack.sh
 
 В этом режиме `metrics_worker` поднимется в отдельной сессии `aabot-metrics` и изолирован от `aabot-bot`.
 
+## Автоперезапуск (с 2026-05)
+
+`./run_tmux_stack.sh` запускает `bot.py`, `sync_worker.py` и `uvicorn` в цикле `while true` (пауза 5 с после падения). Ручной `./run_tmux` больше не нужен для восстановления после краша.
+
+Переменные: `RESTART_DELAY_SEC`, `AABOT_PROJECT_DIR`, `PYTHON_BIN`.
+
 ## Вариант с явными двумя tmux-сессиями
 
 ## 1) Остановить старые процессы
@@ -106,6 +112,10 @@ tmux kill-session -t aabot-sync
 ```bash
 tmux kill-session -t aabot-metrics
 ```
+
+## Docker (отдельно от helper-бота)
+
+См. `DOCKER.md` в этой же папке.
 
 ## Что это даёт
 

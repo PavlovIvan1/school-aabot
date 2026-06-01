@@ -897,7 +897,7 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
 
 Здесь связь с личным трекером, поддержка и психолог. Все в одном месте - удобно и без лишних поисков
 
-Выбирай нужный раздел нише и нажимай на кнопку👇🏽"""
+Выбирай нужный раздел ниже и нажимай на кнопку👇🏽"""
 
     try:
         await message.answer_photo(
@@ -966,7 +966,7 @@ async def command_start_handler(call: CallbackQuery, state: FSMContext) -> None:
 
 Здесь связь с личным трекером, поддержка и психолог. Все в одном месте - удобно и без лишних поисков
 
-Выбирай нужный раздел нише и нажимай на кнопку👇🏽"""
+Выбирай нужный раздел ниже и нажимай на кнопку👇🏽"""
 
     try:
         await call.message.answer_photo(

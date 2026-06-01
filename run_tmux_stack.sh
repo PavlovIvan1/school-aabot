@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_DIR="/root/dev_bot"
+PROJECT_DIR="${AABOT_PROJECT_DIR:-/root/dev_bot}"
 BOT_SESSION="aabot-bot"
 SYNC_SESSION="aabot-sync"
 WEB_SESSION="aabot-web"
 METRICS_SESSION="aabot-metrics"
+PYTHON_BIN="${PYTHON_BIN:-python3}"
+RESTART_DELAY_SEC="${RESTART_DELAY_SEC:-5}"
 
 # Можно переопределить через env при запуске скрипта
 WEB_HOST="${WEB_HOST:-0.0.0.0}"
@@ -33,24 +35,31 @@ pkill -f "uvicorn bot:app" 2>/dev/null || true
 
 sleep 1
 
+_run_loop() {
+  local label="$1"
+  shift
+  echo "cd '${PROJECT_DIR}' && export TELEGRAM_PROXY_URL='${TELEGRAM_PROXY_URL}' HTTP_PROXY='${HTTP_PROXY}' HTTPS_PROXY='${HTTPS_PROXY}' ALL_PROXY='${ALL_PROXY}' && while true; do echo \"[${label}] start \$(date -Is)\"; $*; echo \"[${label}] exit \$?, sleep ${RESTART_DELAY_SEC}s\"; sleep ${RESTART_DELAY_SEC}; done"
+}
+
 echo "[stack] start bot session: $BOT_SESSION"
-tmux new -d -s "$BOT_SESSION" "cd $PROJECT_DIR && export TELEGRAM_PROXY_URL='$TELEGRAM_PROXY_URL' HTTP_PROXY='$HTTP_PROXY' HTTPS_PROXY='$HTTPS_PROXY' ALL_PROXY='$ALL_PROXY' && python bot.py"
+tmux new -d -s "$BOT_SESSION" "$(_run_loop aabot-bot ${PYTHON_BIN} bot.py)"
 tmux set-option -t "$BOT_SESSION" remain-on-exit on
 
 echo "[stack] start sync session: $SYNC_SESSION"
-tmux new -d -s "$SYNC_SESSION" "cd $PROJECT_DIR && export TELEGRAM_PROXY_URL='$TELEGRAM_PROXY_URL' HTTP_PROXY='$HTTP_PROXY' HTTPS_PROXY='$HTTPS_PROXY' ALL_PROXY='$ALL_PROXY' && python sync_worker.py"
+tmux new -d -s "$SYNC_SESSION" "$(_run_loop aabot-sync ${PYTHON_BIN} sync_worker.py)"
 tmux set-option -t "$SYNC_SESSION" remain-on-exit on
 
 echo "[stack] start metrics session: $METRICS_SESSION"
 if [[ "${ENABLE_METRICS_WORKER:-0}" == "1" ]]; then
-  tmux new -d -s "$METRICS_SESSION" "cd $PROJECT_DIR && python metrics_worker.py"
+  tmux new -d -s "$METRICS_SESSION" "$(_run_loop aabot-metrics ${PYTHON_BIN} metrics_worker.py)"
   tmux set-option -t "$METRICS_SESSION" remain-on-exit on
 else
   echo "[stack] metrics worker disabled by default (set ENABLE_METRICS_WORKER=1 to enable)"
 fi
 
 echo "[stack] start web session: $WEB_SESSION"
-tmux new -d -s "$WEB_SESSION" "cd $PROJECT_DIR && python -m uvicorn bot:app --host $WEB_HOST --port $WEB_PORT --ssl-keyfile $SSL_KEYFILE --ssl-certfile $SSL_CERTFILE"
+WEB_CMD="${PYTHON_BIN} -m uvicorn bot:app --host ${WEB_HOST} --port ${WEB_PORT} --ssl-keyfile ${SSL_KEYFILE} --ssl-certfile ${SSL_CERTFILE}"
+tmux new -d -s "$WEB_SESSION" "$(_run_loop aabot-web ${WEB_CMD})"
 tmux set-option -t "$WEB_SESSION" remain-on-exit on
 
 sleep 2

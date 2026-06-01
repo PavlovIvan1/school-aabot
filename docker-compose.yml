@@ -1,0 +1,96 @@
+# Запуск из каталога бота на сервере (например /root/dev_bot):
+#   cp .env.docker.example .env.docker
+#   docker compose --env-file .env.docker up -d --build
+#
+# MySQL — на хосте, не в compose. DATABASE_* берутся из .env
+
+name: school-aabot
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  bot:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      DATABASE_IP: ${DATABASE_IP:-host.docker.internal}
+      DISABLE_BACKGROUND_SYNC: "1"
+      RESTART_LABEL: aabot-bot
+    depends_on:
+      redis:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  sync:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_IP: ${DATABASE_IP:-host.docker.internal}
+      RESTART_LABEL: aabot-sync
+    command: ["python", "sync_worker.py"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  web:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_IP: ${DATABASE_IP:-host.docker.internal}
+      RESTART_LABEL: aabot-web
+    command:
+      - python
+      - -m
+      - uvicorn
+      - bot:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "443"
+      - --ssl-keyfile
+      - /certs/privkey.pem
+      - --ssl-certfile
+      - /certs/fullchain.pem
+    ports:
+      - "${WEB_PORT:-443}:443"
+    volumes:
+      - ${SSL_CERT_DIR:-/etc/letsencrypt/live/rb.infinitydev.tw1.su}:/certs:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  metrics:
+    profiles: ["metrics"]
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_IP: ${DATABASE_IP:-host.docker.internal}
+      RESTART_LABEL: aabot-metrics
+    command: ["python", "metrics_worker.py"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  redis_data:
