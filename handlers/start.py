@@ -1977,7 +1977,7 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
         try:
             await message.bot.send_message(
                 config.LOG_CHAT_ID,
-                f"⚠️ Fallback отправки ДЗ в чат коммуникации для {email_key}: "
+                f"ℹ️ Fallback отправки ДЗ в чат коммуникации для {email_key}: "
                 f"source={send_chat_source}, send_chat_id={SEND_CHAT_ID}, "
                 f"tracker_chat_id={tracker_chat_id}, "
                 f"homework_chat_from_config={homework_chat_from_config}, "
