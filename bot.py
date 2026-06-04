@@ -2713,6 +2713,7 @@ async def check_info():
     while True:
         print('Новый цикл')
         try:
+            db.ensure_connection()
             table_2 = await ss_2.get_worksheet_by_id(0)
             table_2_data = await table_2.get_all_values()
         except Exception as e:
@@ -3190,6 +3191,10 @@ async def check_info():
                     print(traceback.format_exc())
             await asyncio.sleep(20)
         except Exception as e:
+            try:
+                db.reconnect()
+            except Exception:
+                pass
             try:
                 await bot.send_message(config.LOG_CHAT_ID, f'@infinityqqqq Произошла непридвиденная ошибка при обновлении таблиц, приостанавливаю обновление на 3 минуты: {e}')
             except:

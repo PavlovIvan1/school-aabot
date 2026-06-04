@@ -4,6 +4,35 @@ import json
 import time
 import re
 
+_RECONNECT_ERRNOS = {2006, 2013, 2055}
+
+
+class _ReconnectingCursor:
+    """Обёртка над cursor: ping перед запросом и один retry после обрыва соединения."""
+
+    def __init__(self, owner: "MySQL"):
+        self._owner = owner
+        self._cursor = owner._create_raw_cursor()
+
+    def _replace_cursor(self):
+        self._cursor = self._owner._create_raw_cursor()
+
+    def execute(self, operation, params=None, multi=False):
+        for attempt in range(2):
+            try:
+                self._owner.ensure_connection()
+                return self._cursor.execute(operation, params, multi)
+            except mysql.connector.Error as e:
+                if attempt == 0 and e.errno in _RECONNECT_ERRNOS:
+                    self._owner.reconnect()
+                    self._replace_cursor()
+                    continue
+                raise
+
+    def __getattr__(self, name):
+        return getattr(self._cursor, name)
+
+
 class MySQL:
 
     @staticmethod
@@ -25,20 +54,53 @@ class MySQL:
 
         return value
 
-    def __init__(self):
-        self.database = mysql.connector.connect(
+    def _create_connection(self):
+        return mysql.connector.connect(
             user=config.DATABASE_USER,
             password=config.DATABASE_PASSWORD,
             host=config.DATABASE_IP,
             database=config.DATABASE_NAME,
             autocommit=True,
             consume_results=True,
+            connection_timeout=30,
         )
+
+    def _create_raw_cursor(self):
+        return self.database.cursor(dictionary=True, buffered=True)
+
+    def _apply_session_settings(self):
+        self.cursor.execute("SET SESSION wait_timeout=31536000")
+        self.cursor.execute("SET SESSION net_read_timeout=600")
+        self.cursor.execute("SET SESSION net_write_timeout=600")
+
+    def ensure_connection(self):
+        try:
+            if not self.database.is_connected():
+                self.reconnect()
+                return
+            self.database.ping(reconnect=True, attempts=1, delay=0)
+        except mysql.connector.Error:
+            self.reconnect()
+
+    def reconnect(self):
+        try:
+            self.database.close()
+        except Exception:
+            pass
+        self.database = self._create_connection()
+        if isinstance(self.cursor, _ReconnectingCursor):
+            self.cursor._replace_cursor()
+        else:
+            self.cursor = _ReconnectingCursor(self)
+        self._apply_session_settings()
+
+    def __init__(self):
+        self.database = self._create_connection()
         # buffered=True + consume_results=True критично для текущей архитектуры,
         # где один курсор используется в разных обработчиках (aiogram + FastAPI WS).
         # Это снижает риск mysql.connector.errors.InternalError: Unread result found
-        self.cursor = self.database.cursor(dictionary=True, buffered=True)
-        self.cursor.execute("SET SESSION wait_timeout=31536000")
+        self.cursor = _ReconnectingCursor(self)
+        self._apply_session_settings()
 
         self.cursor.execute("""CREATE TABLE IF NOT EXISTS trackers_messages (
             message_id INTEGER AUTO_INCREMENT PRIMARY KEY,
