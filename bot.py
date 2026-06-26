@@ -693,7 +693,7 @@ async def handle_alice_request(request: Request):
             link_access_rows = db.get_link_access_by_user_id(str(user_id_int))
             if len(link_access_rows) != 0 and link_access_rows[0].get("email"):
                 try:
-                    db.add_user(user_id_int, link_access_rows[0]["email"].lower())
+                    db.add_user(user_id_int, clean_string(link_access_rows[0]["email"]))
                     user_data = db.get_user(user_id_int)
                 except Exception:
                     pass
@@ -900,7 +900,7 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
         link_access_rows = db.get_link_access_by_user_id(str(user_id))
         if len(link_access_rows) != 0 and link_access_rows[0].get("email"):
             try:
-                db.add_user(int(user_id), link_access_rows[0]["email"].lower())
+                db.add_user(int(user_id), clean_string(link_access_rows[0]["email"]))
                 user_data = db.get_user(int(user_id))
             except Exception:
                 pass
@@ -1097,7 +1097,7 @@ async def websocket_chat(websocket: WebSocket, user_id: str):
         link_access_rows = db.get_link_access_by_user_id(str(raw_user_id))
         if len(link_access_rows) != 0 and link_access_rows[0].get("email"):
             try:
-                db.add_user(int(raw_user_id), link_access_rows[0]["email"].lower())
+                db.add_user(int(raw_user_id), clean_string(link_access_rows[0]["email"]))
                 user_data = db.get_user(int(raw_user_id))
             except Exception:
                 pass
@@ -1398,7 +1398,7 @@ async def handle_alice_request(request: Request):
                     users_list = [user]
                 else:
                     try:
-                        db.add_user(recovered_user_id, canonical_email.lower())
+                        db.add_user(recovered_user_id, clean_string(canonical_email))
                     except Exception:
                         pass
 
@@ -2819,7 +2819,7 @@ async def check_info():
                 for idx, user in enumerate(db_data, start=1):
                     if idx % 25 == 0:
                         await asyncio.sleep(0)
-                    if user['mail'].lower() not in emails_list:
+                    if clean_string(user['mail']) not in emails_list:
                         users_list = db.get_user_by_email(user['mail'])
 
                         for user_2 in users_list:
